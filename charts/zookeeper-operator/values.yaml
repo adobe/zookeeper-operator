@@ -29,3 +29,13 @@ crd:
 # Default: "" == Watch ALL namespaces
 # Multiple namespaces can be configured using a comma separated list of namespaces
 watchNamespace: ""
+
+#
+# Operator pod resources
+resources:
+  limits:
+    cpu: 2
+    memory: 256Mi
+  requests:
+    cpu: 1
+    memory: 128Mi
