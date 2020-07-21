@@ -1,9 +1,6 @@
 name: build-publish-docker-image
 
-on:
-  push:
-    tags:
-      - '*'
+on: [push, pull_request]
 
 jobs:
   build:
@@ -12,8 +9,13 @@ jobs:
       - uses: actions/checkout@v2
       - name: Get tag name
         id: vars
-        run: echo ::set-output name=tag::${GITHUB_REF:10}
-      - uses: docker/build-push-action@v1
+        run: |
+          ref=${GITHUB_REF:10}
+          ref="${ref////-}"
+          echo $ref
+          echo ::set-output name=tag::$ref
+      - name: Build and push zookeeper-operator image
+        uses: docker/build-push-action@v1
         with:
           dockerfile: Dockerfile
           build_args: VERSION=${{ steps.vars.outputs.tag }},GIT_SHA=${{ github.sha }}
@@ -21,5 +23,17 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: adobe/zookeeper-operator
           tag_with_ref: true
-          push: ${{ startsWith(github.ref, 'refs/tags/') }}
           add_git_labels: true
+          always_pull: true
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+      - name: Build and push zookeeper image
+        uses: docker/build-push-action@v1
+        with:
+          path: docker
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: adobe/zookeeper
+          tags: 3.6.1-${{ steps.vars.outputs.tag }}
+          add_git_labels: true
+          always_pull: true
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
