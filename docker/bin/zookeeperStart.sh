@@ -135,16 +135,17 @@ if [[ "$REGISTER_NODE" == true ]]; then
     set +e
 fi
 
+echo Copying /conf contents to writable directory, to support Zookeeper dynamic reconfiguration
 ZOOCFGDIR=/data/conf
 export ZOOCFGDIR
 if [[ ! -d "$ZOOCFGDIR" ]]; then
-  echo Copying /conf contents to writable directory, to support Zookeeper dynamic reconfiguration
   mkdir $ZOOCFGDIR
-  cp -f /conf/zoo.cfg $ZOOCFGDIR
-  cp -f /conf/log4j.properties $ZOOCFGDIR
-  cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
-  cp -f /conf/env.sh $ZOOCFGDIR
 fi
+# refresh config files from source /conf dir
+cp -f /conf/log4j.properties $ZOOCFGDIR
+cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
+cp -f /conf/env.sh $ZOOCFGDIR
+cp -f /conf/zoo.cfg $ZOOCFGDIR
 
 if [ -f $DYNCONFIG ]; then
   # Node registered, start server
