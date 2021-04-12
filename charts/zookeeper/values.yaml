@@ -1,8 +1,8 @@
 replicas: 3
 
 image:
-  repository: pravega/zookeeper
-  tag: 0.2.10
+  repository: adobe/zookeeper
+  tag: 3.6.3-0.2.9-adobe-20210413
   pullPolicy: IfNotPresent
 
 domainName:
