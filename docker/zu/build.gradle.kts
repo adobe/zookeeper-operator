@@ -1,7 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    kotlin("jvm") version "1.3.70"
+    kotlin("jvm") version "1.5.0"
     id("com.github.johnrengelman.shadow") version "5.2.0"
 }
 
@@ -12,7 +12,7 @@ repositories {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("org.apache.zookeeper:zookeeper:3.6.1")
+    implementation("org.apache.zookeeper:zookeeper:3.6.3")
 }
 
 tasks.withType<ShadowJar>() {

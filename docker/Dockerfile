@@ -8,17 +8,18 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
-ARG DOCKER_REGISTRY
-FROM  ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}openjdk:11-jdk
+FROM azul/zulu-openjdk:11
 RUN mkdir /zu
 COPY zu /zu
 WORKDIR /zu
 RUN ./gradlew --console=verbose --info shadowJar
 
-FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}zookeeper:3.6.1
+# use forked base zookeeper 3.6.3 docker image
+# that runs on azul openjdk-16
+FROM adobe/zookeeper:3.6.3-apache-zk-20210521
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /root/
 
 RUN apt-get -q update && \
-    apt-get install -y dnsutils curl procps
+    apt-get install --no-install-recommends -y curl dnsutils procps
