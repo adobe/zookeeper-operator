@@ -14,6 +14,9 @@ set -ex
 source /conf/env.sh
 source /usr/local/bin/zookeeperFunctions.sh
 
+START_DELAY=${START_DELAY:-0}
+
+
 HOST=`hostname -s`
 DATA_DIR=/data
 MYID_FILE=$DATA_DIR/myid
@@ -50,6 +53,10 @@ fi
 # domain should be the OUTSIDE_NAME for when it's set
 DOMAIN=${SEED_NODE:-$DOMAIN}
 
+# wait for loadbalancer registration and skip the first one
+if [ $MYID -gt $OFFSET ]; then
+  sleep $START_DELAY
+fi
 
 # Values for first startup
 WRITE_CONFIGURATION=true
