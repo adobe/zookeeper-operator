@@ -21,6 +21,9 @@ LOG4J_CONF=/conf/log4j-quiet.properties
 DYNCONFIG=$DATA_DIR/zoo.cfg.dynamic
 STATIC_CONFIG=/data/conf/zoo.cfg
 
+# used when zkid starts from value grater then 1, default 1
+OFFSET=${OFFSET:-1}
+
 # Extract resource name and this members ordinal value from pod hostname
 if [[ $HOST =~ (.*)-([0-9]+)$ ]]; then
     NAME=${BASH_REMATCH[1]}
@@ -30,7 +33,8 @@ else
     exit 1
 fi
 
-MYID=$((ORD+1))
+MYID=$(($ORD+$OFFSET))
+
 
 # Values for first startup
 WRITE_CONFIGURATION=true
@@ -114,7 +118,7 @@ fi
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
-  if [[ $MYID -eq 1 ]]; then
+  if [[ $MYID -eq $OFFSET ]]; then
     ROLE=participant
     echo Initial initialization of ordinal 0 pod, creating new config.
     ZKCONFIG=$(zkConfig)
