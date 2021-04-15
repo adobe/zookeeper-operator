@@ -18,6 +18,10 @@ DATA_DIR=/data
 MYID_FILE=$DATA_DIR/myid
 LOG4J_CONF=/conf/log4j-quiet.properties
 
+# use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
+# CLIENT_HOST is used in zkConnectionString function already to create zkURL
+CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
+
 # Wait for client connections to drain. Kubernetes will wait until the confiugred
 # "terminationGracePeriodSeconds" before focibly killing the container
 CONN_COUNT=`echo cons | nc localhost 2181 | grep -v "^$" |grep -v "/127.0.0.1:" | wc -l`

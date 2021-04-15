@@ -35,6 +35,14 @@ fi
 
 MYID=$(($ORD+$OFFSET))
 
+# use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
+# CLIENT_HOST is used in zkConnectionString function already to create zkURL
+CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
+
+
+# domain should be the OUTSIDE_NAME for when it's set
+DOMAIN=${SEED_NODE:-$DOMAIN}
+
 
 # Values for first startup
 WRITE_CONFIGURATION=true
@@ -118,7 +126,7 @@ fi
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
-  if [[ $MYID -eq $OFFSET ]]; then
+  if [[ $MYID -eq $OFFSET && -z "$SEED_NODE" ]]; then
     ROLE=participant
     echo Initial initialization of ordinal 0 pod, creating new config.
     ZKCONFIG=$(zkConfig)
