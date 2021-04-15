@@ -54,6 +54,14 @@ if [[ "$OK" == "imok" ]]; then
     fi
     MYID=$(($ORD+$OFFSET))
     ONDISK_CONFIG=false
+    
+    # use FQDN_TEMPLATE to create an OUTSIDE_NAME that is going to be used to establish quorum election
+    # this should be used along with the quorumListenOnAllIPs set to true
+    # % from the FQDN_TEMPLATE will be replaced with pod index+1
+    if [ -n "$FQDN_TEMPLATE" ]; then
+      OUTSIDE_NAME=$(echo ${FQDN_TEMPLATE} | sed "s/%/$(($ORD+1))/g")
+    fi
+    
     if [ -f $MYID_FILE ]; then
       EXISTING_ID="`cat $DATA_DIR/myid`"
       if [[ "$EXISTING_ID" == "$MYID" && -f $STATIC_CONFIG ]]; then
@@ -82,7 +90,7 @@ if [[ "$OK" == "imok" ]]; then
       echo "Zookeeper service is ready to be upgraded from observer to participant."
       ROLE=participant
       ZKURL=$(zkConnectionString)
-      ZKCONFIG=$(zkConfig)
+      ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /root/zu.jar remove $ZKURL $MYID
       sleep 1
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /root/zu.jar add $ZKURL $MYID $ZKCONFIG
