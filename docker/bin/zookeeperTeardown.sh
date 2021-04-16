@@ -47,7 +47,6 @@ MYID=`cat $MYID_FILE`
 ZNODE_PATH="/zookeeper-operator/$CLUSTER_NAME"
 CLUSTERSIZE=`java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /root/zu.jar sync $ZKURL $ZNODE_PATH`
 echo "CLUSTER_SIZE=$CLUSTERSIZE, MyId=$MYID"
-CLUSTERSIZE=$(($CLUSTERSIZE+$OFFSET-1))
 if [[ -n "$CLUSTERSIZE" && "$(($CLUSTERSIZE+$OFFSET-1))" -lt "$MYID" ]]; then
   # If ClusterSize < MyId, this server is being permanantly removed.
   java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /root/zu.jar remove $ZKURL $MYID
