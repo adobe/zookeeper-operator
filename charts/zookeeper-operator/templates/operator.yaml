@@ -62,7 +62,7 @@ spec:
 {{ toYaml .Values.tolerations | indent 8 }}
       {{- end }}
 {{- if .Values.logForward.create }}
-      - name: {{ .Values.splunk.fluentBit.name }}
+      - name: {{ include "splunk.fluentBit.name" .}}
         image: "{{ .Values.splunk.fluentBit.image.repository }}:{{ .Values.splunk.fluentBit.image.tag }}"
         imagePullPolicy: {{ .Values.splunk.fluentBit.image.pullPolicy }}
         {{- if .Values.splunk.fluentBit.resources }}
@@ -124,7 +124,7 @@ spec:
       volumes:
         - name: fluent-bit-config
           configMap:
-            name: {{ .Values.splunk.fluentBit.name }}-configmap
+            name: {{ include "splunk.fluentBit.name" .}}-sidecar-configmap
         - name: logging-volume
           emptyDir: {}
         - name: fluent-data
