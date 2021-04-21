@@ -25,7 +25,7 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
-Common labels
+Common labels test
 */}}
 {{- define "zookeeper-operator.commonLabels" -}}
 app.kubernetes.io/name: {{ include "zookeeper-operator.name" . }}
