@@ -53,3 +53,4 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `nodeSelector` | Map of key-value pairs to be present as labels in the node in which the pod should run | `{}` |
 | `affinity` | Specifies scheduling constraints on pods | `{}` |
 | `tolerations` | Specifies the pod's tolerations | `[]` |
+| `logForward:create` | If true, operator logs forward to Splunk | `false` |
