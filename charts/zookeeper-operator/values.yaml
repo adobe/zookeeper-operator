@@ -47,3 +47,34 @@ affinity: {}
 tolerations: []
 # Pod annotations
 annotations: {}
+
+## In this usecase, we are using splunk as destination for logs.
+logForward:
+  create: true
+
+## fluent-bit image details and whether to enable it or not.
+## splunk host,index details.
+splunk:
+  host: "splunk-hec-ext.adobe.net"
+  source: "zookeeper-operator"
+  index: "plat_app_preprod"
+  logParser: "docker"
+  sourceType: "pod"
+  port: 443
+  token: "splunk-token"
+  fluentBit:
+    name: "fluent-bit"
+    resources:
+      limits:
+        cpu: "250m"
+        memory: "512Mi"
+      requests:
+        cpu: "50m"
+        memory: "128Mi"
+    port: 2020
+    image:
+      repository: docker-k8s-infrastructure-public-release.dr-uw2.adobeitc.com/ethos/ethos-fluent-bit
+      tag: 1.5.6-debug
+      pullPolicy: IfNotPresent
+      imagePullSecrets:
+        - artifactory-registry-key
