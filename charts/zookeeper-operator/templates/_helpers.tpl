@@ -35,14 +35,3 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
 {{- end -}}
-
-{{/*
-Compute operator splunk fluentBit name
-*/}}
-{{- define "splunk.fluentBit.name" -}}
-{{- if .Values.logForward.create -}}
-{{ default "fluent-bit" .Values.splunk.fluentBit.name }}
-{{- else -}}
-{{ default "fluent-bit" .Values.splunk.fluentBit.name }}
-{{- end -}}
-{{- end -}}

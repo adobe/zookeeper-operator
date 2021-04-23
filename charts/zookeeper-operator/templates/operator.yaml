@@ -21,6 +21,13 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      volumes:
+{{- if .Values.logForward.create }}
+{{- include "fluent-bit-sidecar-volume" . | indent 6 }}
+{{- end }}
+{{- if .Values.logForward.create -}}
+{{- include "fluent-bit-sidecar-imagePullSecrets" . | indent 6 }}
+{{- end }}
       containers:
       - name: {{ template "zookeeper-operator.fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -37,18 +44,18 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        {{- if .Values.logForward.create }}
-        - name: POD_UID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.uid
-        {{- end }}
         - name: OPERATOR_NAME
           value: {{ template "zookeeper-operator.fullname" . }}
+        {{- if .Values.logForward.create }}
+        {{- include "fluent-bit-sidecar-pod-uid" . | indent 8 }}
+        {{- end }}
         {{- if .Values.resources }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         {{- end }}
+{{- if .Values.logForward.create -}}
+{{- include "fluent-bit-sidecar" . | indent 6 }}
+{{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
@@ -61,79 +68,3 @@ spec:
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       {{- end }}
-{{- if .Values.logForward.create }}
-      - name: {{ include "splunk.fluentBit.name" .}}
-        image: "{{ .Values.splunk.fluentBit.image.repository }}:{{ .Values.splunk.fluentBit.image.tag }}"
-        imagePullPolicy: {{ .Values.splunk.fluentBit.image.pullPolicy }}
-        {{- if .Values.splunk.fluentBit.resources }}
-        resources:
-{{ toYaml .Values.splunk.fluentBit.resources | indent 10 }}
-        {{- end }}
-        ports:
-          - containerPort: {{ .Values.splunk.fluentBit.port }} # metrics endpoint is ${POD_IP}:2020/api/v1/metrics/prometheus
-        volumeMounts:
-          - name: fluent-bit-config
-            mountPath: /fluent-bit/etc
-          - name: logging-volume
-            mountPath: /logging-volume
-          - name: fluent-data
-            mountPath: /var/fluent-bit
-        env:
-        - name: SPLUNK_HOST
-          value: "{{ .Values.splunk.host }}"
-        - name: SPLUNK_PORT
-          value: "{{ .Values.splunk.port }}"
-        - name: SPLUNK_INDEX
-          value: "{{ .Values.splunk.index }}"
-        - name: SPLUNK_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.splunk.token }}
-              key: token
-        - name: SPLUNK_SOURCE
-          value: {{ .Values.splunk.source }}
-        - name: POD_UID_FLUENT_BIT
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.uid
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: status.podIP
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
-        - name: NODE_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
-        - name: SPLUNK_SOURCETYPE
-          value: {{ .Values.splunk.sourceType }}
-        - name: LOG_PARSER
-          value: {{ .Values.splunk.logParser }}
-      volumes:
-        - name: fluent-bit-config
-          configMap:
-            name: {{ include "splunk.fluentBit.name" .}}-sidecar-configmap
-        - name: logging-volume
-          emptyDir: {}
-        - name: fluent-data
-          emptyDir: {}
-      imagePullSecrets:
-{{- range (default .Values.global.imagePullSecrets .Values.splunk.fluentBit.image.imagePullSecrets ) }}
-      - name: {{ . }}
-{{- end }}
-{{- range (default .Values.global.imagePullSecrets .Values.serviceAccount.imagePullSecrets ) }}
-      - name: {{ . }}
-{{- end }}
-{{- end }}

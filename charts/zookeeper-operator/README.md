@@ -54,17 +54,17 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `affinity` | Specifies scheduling constraints on pods | `{}` |
 | `tolerations` | Specifies the pod's tolerations | `[]` |
 | `logForward:create` | If true, operator logs forward to Splunk | `false` |
-| `splunk.host` | Splunk server can be set | `""` |
-| `splunk.source` | Source of logs can be set | `kafka-operator` |
-| `splunk.index` | Splunk index can be set | `""` |
-| `splunk.logParser` | Splunk logParser can be set | `docker` |
-| `splunk.sourceType` | Log SourceType can be set | `pod` |
-| `splunk.port` | Splunk port can be set | `443` |
-| `splunk.token` | Splunk secret token can be set | `""` |
-| `splunk.fluentBit.name` | fluent-bit container name can be set | `fluent-bit` |
-| `splunk.fluentBit.resources`| CPU/Memory resource requests/limits (YAML) | Memory: `128Mi/512Mi`, CPU: `50m/250m` |
-| `splunk.fluentBit.port` | fluent-bit container port can be set | `2020` |
-| `splunk.fluentBit.image.repository` | fluent-bit container image repository | `""` |
-| `splunk.fluentBit.image.tag` | fluent-bit container image tag | `""` |
-| `splunk.fluentBit.image.pullPolicy` | fluent-bit container image pull policy | `IfNotPresent` |
-| `splunk.fluentBit.image.imagePullSecrets` | Image pull secrets can be set | `[]` |
+| `logSidecars.destinations.splunk.host` | Splunk server can be set | `""` |
+| `logSidecars.destinations.splunk.source` | Source of logs can be set | `kafka-operator` |
+| `logSidecars.destinations.splunk.index` | Splunk index can be set | `""` |
+| `logSidecars.destinations.splunk.logParser` | Splunk logParser can be set | `docker` |
+| `logSidecars.destinations.splunk.sourceType` | Log SourceType can be set | `pod` |
+| `logSidecars.destinations.splunk.port` | Splunk port can be set | `443` |
+| `logSidecars.destinations.splunk.token` | Splunk secret token can be set | `""` |
+| `logSidecars.destinations.splunk.fluentBit.name` | fluent-bit container name can be set | `fluent-bit` |
+| `logSidecars.destinations.splunk.fluentBit.resources`| CPU/Memory resource requests/limits(YAML) | Memory: `128Mi/512Mi`, CPU: `50m/250m` |
+| `logSidecars.fluentBit.port` | fluent-bit container port can be set | `2020` |
+| `logSidecars.fluentBit.image.repository` | fluent-bit container image repository | `""` |
+| `logSidecars.fluentBit.image.tag` | fluent-bit container image tag | `""` |
+| `logSidecars.fluentBit.image.pullPolicy` | fluent-bit container image pull policy | `IfNotPresent` |
+| `logSidecars.fluentBit.image.imagePullSecrets` | Image pull secrets can be set | `[]` |
