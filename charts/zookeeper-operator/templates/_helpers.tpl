@@ -35,3 +35,15 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
 {{- end -}}
+
+{{/*
+Sidecar implementation details
+*/}}
+{{- define "chart.additionalSidecars"}}
+{{- end}}
+
+{{/*
+Sidecar volume implementation details
+*/}}
+{{- define "chart.AdditionalVolumes"}}
+{{- end}}

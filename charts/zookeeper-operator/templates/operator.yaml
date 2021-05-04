@@ -22,12 +22,7 @@ spec:
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       volumes:
-{{- if .Values.logForward.create }}
-{{- include "fluent-bit-sidecar-volume" . | indent 6 }}
-{{- end }}
-{{- if .Values.logForward.create -}}
-{{- include "fluent-bit-sidecar-imagePullSecrets" . | indent 6 }}
-{{- end }}
+{{- include "chart.AdditionalVolumes" . | indent 6 }}
       containers:
       - name: {{ template "zookeeper-operator.fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -46,15 +41,16 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: {{ template "zookeeper-operator.fullname" . }}
-        {{- if .Values.logForward.create }}
-        {{- include "fluent-bit-sidecar-pod-uid" . | indent 8 }}
+        {{- if .Values.additionalSidecars.POD_UID }}
+        - name: POD_UID
+{{ toYaml .Values.additionalSidecars.POD_UID | indent 10 }}
         {{- end }}
         {{- if .Values.resources }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         {{- end }}
 {{- if .Values.logForward.create -}}
-{{- include "fluent-bit-sidecar" . | indent 6 }}
+{{- include "chart.additionalSidecars" . | indent 6 }}
 {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector:
