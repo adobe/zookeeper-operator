@@ -40,10 +40,18 @@ helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
 Sidecar implementation details
 */}}
 {{- define "chart.additionalSidecars"}}
+{{- range $container := . }}
+- name: {{ $container.name }}
+  image: {{ $container.image }}
+{{ end }}
 {{- end}}
 
 {{/*
 Sidecar volume implementation details
 */}}
-{{- define "chart.AdditionalVolumes"}}
+{{- define "chart.additionalVolumes"}}
+{{- range $volumes := . }}
+- name: {{ $volumes.name }}
+  emptyDir: {{ $volumes.emptyDir }}
+{{ end }}
 {{- end}}

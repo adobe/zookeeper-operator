@@ -48,10 +48,17 @@ tolerations: []
 # Pod annotations
 annotations: {}
 
-## Whether to create the LogForwarding or not.
-## For enabling LogForwarding feature, set the logForward.create to true.
-logForward:
-  create: false
-
 ## AdditionalSidecar configuration details.
 additionalSidecars: {}
+# - name: nginx
+#   image: nginx:latest
+
+## AdditionalSidecarEnvironment configuration details.
+additionalEnv: {}
+
+## AdditionalSidecarVolumes configuration details.
+additionalVolumes: {}
+# - name: volume1
+#   emptyDir: {}
+# - name: volume2
+#   emptyDir: {}
