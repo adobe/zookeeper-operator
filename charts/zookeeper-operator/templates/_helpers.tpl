@@ -49,7 +49,7 @@ Sidecar implementation details
 {{/*
 Sidecar volume implementation details
 */}}
-{{- define "chart.additionalVolumes"}}
+{{- define "chart.additionalSidecarVolumes"}}
 {{- range $volumes := . }}
 - name: {{ $volumes.name }}
   emptyDir: {{ $volumes.emptyDir }}

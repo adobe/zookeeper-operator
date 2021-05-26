@@ -54,10 +54,10 @@ additionalSidecars: {}
 #   image: nginx:latest
 
 ## AdditionalSidecarEnvironment configuration details.
-additionalEnv: {}
+additionalSidecarEnv: {}
 
 ## AdditionalSidecarVolumes configuration details.
-additionalVolumes: {}
+additionalSidecarVolumes: {}
 # - name: volume1
 #   emptyDir: {}
 # - name: volume2

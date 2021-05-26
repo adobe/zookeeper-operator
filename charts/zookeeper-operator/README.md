@@ -55,5 +55,5 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `tolerations` | Specifies the pod's tolerations | `[]` |
 | `additionalSidecars:logging.enable` | If true, operator logs forward to Splunk | `true` |
 | `additionalSidecars` | Additional Sidecars Configuration | `""` |
-| `additionalEnv` | Additional Sidecar Environment Variables | `""` |
-| `additionalVolumes` | Additional volumes required for sidecars | `""` |
+| `additionalSidecarEnv` | Additional Sidecar Environment Variables | `""` |
+| `additionalSidecarVolumes` | Additional volumes required for sidecars | `""` |
