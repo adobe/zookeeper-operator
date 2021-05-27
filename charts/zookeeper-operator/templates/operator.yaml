@@ -21,9 +21,9 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
-      {{- if .Values.additionalSidecarVolumes }}
+      {{- if .Values.additionalVolumes }}
       volumes:
-{{- include "chart.additionalSidecarVolumes" . | indent 6 }}
+{{- include "chart.additionalVolumes" . | indent 6 }}
       {{- end }}
       containers:
       - name: {{ template "zookeeper-operator.fullname" . }}
@@ -43,8 +43,8 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: {{ template "zookeeper-operator.fullname" . }}
-        {{- if .Values.additionalSidecarEnv }}
-{{ toYaml .Values.additionalSidecarEnv | indent 8 }}
+        {{- if .Values.additionalEnv }}
+{{ toYaml .Values.additionalEnv | indent 8 }}
         {{- end }}
         {{- if .Values.resources }}
         resources:
