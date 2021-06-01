@@ -15,8 +15,8 @@ WORKDIR /zu
 RUN ./gradlew --console=verbose --info shadowJar
 
 # use forked base zookeeper 3.6.3 docker image
-# that runs on azul openjdk 16.0.0
-FROM adobe/zookeeper:3.6.3-apache-zk-20210413
+# that runs on azul openjdk-16
+FROM adobe/zookeeper:3.6.3-apache-zk-20210521
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /root/

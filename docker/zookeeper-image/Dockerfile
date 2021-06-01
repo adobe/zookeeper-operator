@@ -1,4 +1,4 @@
-FROM azul/zulu-openjdk:16.0.0
+FROM azul/zulu-openjdk:16.0.1
 
 ENV ZOO_CONF_DIR=/conf \
     ZOO_DATA_DIR=/data \
