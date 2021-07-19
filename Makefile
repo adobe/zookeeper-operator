@@ -117,10 +117,9 @@ generate:
 	$(CONTROLLER_GEN) object paths="./..."
 	$(CONTROLLER_GEN) crd paths=./api/... output:dir=./config/crd/bases schemapatch:manifests=./config/crd/bases
 	# sync crd generated to helm-chart
-	echo '{{- define "crd.openAPIV3Schema" }}' > charts/zookeeper-operator/templates/_crd_openapiv3schema.tpl
-	echo 'openAPIV3Schema:' >> charts/zookeeper-operator/templates/_crd_openapiv3schema.tpl
-	sed -e '1,/openAPIV3Schema/d' config/crd/bases/zookeeper.pravega.io_zookeeperclusters.yaml | sed -n '/served: true/!p;//q' >> charts/zookeeper-operator/templates/_crd_openapiv3schema.tpl
-	echo '{{- end }}' >> charts/zookeeper-operator/templates/_crd_openapiv3schema.tpl
+	echo '{{- if .Values.crd.create }}' > charts/zookeeper-operator/templates/zookeeper.pravega.io_zookeeperclusters_crd.yaml
+	cat config/crd/bases/zookeeper.pravega.io_zookeeperclusters.yaml >> charts/zookeeper-operator/templates/zookeeper.pravega.io_zookeeperclusters_crd.yaml
+	echo '{{- end }}' >> charts/zookeeper-operator/templates/zookeeper.pravega.io_zookeeperclusters_crd.yaml
 
 
 build: test build-go build-image
