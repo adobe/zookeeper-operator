@@ -2,7 +2,7 @@ replicas: 3
 
 image:
   repository: adobe/zookeeper
-  tag: 3.6.3-0.2.11-adobe-20210610rc1
+  tag: 3.7.1-0.2.13-adobe-20211016
   pullPolicy: IfNotPresent
 
 triggerRollingRestart: false

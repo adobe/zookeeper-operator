@@ -12,11 +12,11 @@ FROM mcr.microsoft.com/openjdk/jdk:11-ubuntu
 RUN mkdir /zu
 COPY zu /zu
 WORKDIR /zu
-RUN ./gradlew --console=verbose --info shadowJar
+RUN ./gradlew shadowJar
 
-# use forked base zookeeper 3.6.3 docker image
+# use forked base zookeeper 3.7.1 docker image
 # that runs on openjdk-17
-FROM adobe/zookeeper:3.6.3-apache-zk-20211008
+FROM adobe/zookeeper:3.7.1-apache-zk-20211016
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /opt/libs/
