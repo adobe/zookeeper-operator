@@ -35,8 +35,8 @@ RUN set -eux; \
 # Verify that gosu binary works
     gosu nobody true
 
-ARG SHORT_DISTRO_NAME=zookeeper-3.6.3
-ARG DISTRO_NAME=apache-zookeeper-3.6.3-bin
+ARG SHORT_DISTRO_NAME=zookeeper-3.7.1
+ARG DISTRO_NAME=apache-zookeeper-3.7.1-bin
 
 # Download Apache Zookeeper, verify its PGP signature, untar and clean up
 RUN set -eux; \
@@ -50,6 +50,7 @@ RUN set -eux; \
             https://www-us.apache.org/dist/ \
             https://www.apache.org/dist/ \
             https://archive.apache.org/dist/ \
+            https://github.com/adobe/zookeeper-operator/releases/download/0.2.13-adobe-20211008/ \
         ; do \
             if wget -q -O "$f" "$distUrl$distFile" && [ -s "$f" ]; then \
                 success=1; \
@@ -58,15 +59,15 @@ RUN set -eux; \
         done; \
         [ -n "$success" ]; \
     }; \
-    ddist "$DISTRO_NAME.tar.gz" "zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz"; \
-    ddist "$DISTRO_NAME.tar.gz.asc" "zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz.asc"; \
-    ddist "KEYS" "zookeeper/KEYS"; \
-    export GNUPGHOME="$(mktemp -d)"; \
-    gpg --import KEYS; \
-    gpg --batch --verify "$DISTRO_NAME.tar.gz.asc" "$DISTRO_NAME.tar.gz"; \
+    ddist "$DISTRO_NAME.tar.gz" "$DISTRO_NAME.tar.gz"; \
+    # ddist "$DISTRO_NAME.tar.gz.asc" "zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz.asc"; \
+    # ddist "KEYS" "zookeeper/KEYS"; \
+    # export GNUPGHOME="$(mktemp -d)"; \
+    # gpg --import KEYS; \
+    # gpg --batch --verify "$DISTRO_NAME.tar.gz.asc" "$DISTRO_NAME.tar.gz"; \
     tar -zxf "$DISTRO_NAME.tar.gz"; \
     mv "$DISTRO_NAME/conf/"* "$ZOO_CONF_DIR"; \
-    rm -rf "$GNUPGHOME" "KEYS" "$DISTRO_NAME.tar.gz" "$DISTRO_NAME.tar.gz.asc" "$DISTRO_NAME/docs"; \
+    rm -rf "$DISTRO_NAME.tar.gz" "$DISTRO_NAME.tar.gz.asc" "$DISTRO_NAME/docs"; \
     chown -R zookeeper:zookeeper "/$DISTRO_NAME"
 COPY opt/zkEnv.sh  $DISTRO_NAME/bin/zkEnv.sh
 
