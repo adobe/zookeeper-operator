@@ -22,4 +22,4 @@ RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /opt/libs/
 
 RUN apt-get -q update && \
-    apt-get install --no-install-recommends -y curl dnsutils procps
+    apt-get install --no-install-recommends -y curl dnsutils procps socat

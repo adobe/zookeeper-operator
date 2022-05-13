@@ -28,7 +28,7 @@ OFFSET=${OFFSET:-1}
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
 
 
-OK=$(echo ruok | nc 127.0.0.1 $CLIENT_PORT)
+OK=$(echo ruok | socat stdio tcp:localhost:$CLIENT_PORT)
 
 # Check to see if zookeeper service answers
 if [[ "$OK" == "imok" ]]; then
