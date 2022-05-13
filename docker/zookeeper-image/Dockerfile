@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-focal
+FROM openjdk:17-jdk-slim-bullseye
 
 
 ENV ZOO_CONF_DIR=/conf \
@@ -36,8 +36,8 @@ RUN set -eux; \
 # Verify that gosu binary works
     gosu nobody true
 
-ARG SHORT_DISTRO_NAME=zookeeper-3.6.3
-ARG DISTRO_NAME=apache-zookeeper-3.6.3-bin
+ARG SHORT_DISTRO_NAME=zookeeper-3.7.1
+ARG DISTRO_NAME=apache-zookeeper-3.7.1-bin
 
 # Download Apache Zookeeper, verify its PGP signature, untar and clean up
 RUN set -eux; \
