@@ -258,7 +258,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
-		"reconfigEnabled=true\n" +
+		"reconfigEnabled=" + strconv.FormatBool(z.Spec.Conf.ReconfigEnabled) + "\n" +
 		"skipACL=yes\n" +
 		"metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider\n" +
 		"metricsProvider.httpPort=" + strconv.Itoa(int(ports.Metrics)) + "\n" +

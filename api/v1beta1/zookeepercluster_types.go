@@ -589,6 +589,13 @@ type ZookeeperConfig struct {
 	// The default value is 2000.
 	TickTime int `json:"tickTime,omitempty"`
 
+	//
+	// It defaults to false in Zookeeper but we set it to true here to match the previous
+	// default functionality of the operator
+	//
+	// The default value is true
+	ReconfigEnabled bool `json:"reconfigEnabled,omitempty"`
+
 	// SyncLimit is the amount of time, in ticks, to allow followers to sync with
 	// Zookeeper.
 	//
