@@ -600,7 +600,7 @@ type ZookeeperConfig struct {
 	// where omitting this keeps Reconfig Enabled.
 	//
 	// The default value is false
-	DisableReconfigEnabled bool `json:"reconfigEnabled,omitempty"`
+	DisableReconfigEnabled bool `json:"disableReconfigEnabled,omitempty"`
 
 	// SyncLimit is the amount of time, in ticks, to allow followers to sync with
 	// Zookeeper.
