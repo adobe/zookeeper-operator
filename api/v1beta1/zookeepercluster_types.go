@@ -589,12 +589,16 @@ type ZookeeperConfig struct {
 	// The default value is 2000.
 	TickTime int `json:"tickTime,omitempty"`
 
-	//
-	// It defaults to false in Zookeeper but we set it to true here to match the previous
+	// When set to true, it allows the set of Zookeeper servers, their roles (participant / observer),
+	// all ports, and even the quorum system can be changed dynamically without needing to perfrom a
+	// rolling restart. However when it is true, servers cannot be set explicitly through this operator
+	// in a helm chart and that may cause issues when accessing a zookeeper instance from outside of
+	// the cluster.
+	// It defaults to false in Zookeeper 3.5.3+ but we set it to true here to match the previous
 	// default functionality of the operator
 	//
 	// The default value is true
-	ReconfigEnabled bool `json:"reconfigEnabled,omitempty"`
+	ReconfigEnabled *bool `json:"reconfigEnabled,omitempty"`
 
 	// SyncLimit is the amount of time, in ticks, to allow followers to sync with
 	// Zookeeper.
