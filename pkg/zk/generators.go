@@ -257,15 +257,16 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	}
 
 	// Disabling Dynamic Reconfig logic to keep old versions of the operator function (omitting the value in config defaults to enabling the reconfig)
-	var reconfigEnabled = true
+	/*var reconfigEnabled = true
 	if z.Spec.Conf.DisableReconfigEnabled {
 		reconfigEnabled = false
-	}
+	}*/
 
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
-		"reconfigEnabled=" + strconv.FormatBool(reconfigEnabled) + "\n" +
+		"# Test comment\n" +
+		"reconfigEnabled=true\n" +
 		"skipACL=yes\n" +
 		"metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider\n" +
 		"metricsProvider.httpPort=" + strconv.Itoa(int(ports.Metrics)) + "\n" +
