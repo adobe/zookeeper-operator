@@ -266,7 +266,6 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
 		"# Test comment\n" +
-		"reconfigEnabled=true\n" +
 		"skipACL=yes\n" +
 		"metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider\n" +
 		"metricsProvider.httpPort=" + strconv.Itoa(int(ports.Metrics)) + "\n" +
@@ -287,6 +286,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		"autopurge.purgeInterval=" + strconv.Itoa(z.Spec.Conf.AutoPurgePurgeInterval) + "\n" +
 		"quorumListenOnAllIPs=" + strconv.FormatBool(z.Spec.Conf.QuorumListenOnAllIPs) + "\n" +
 		"admin.serverPort=" + strconv.Itoa(int(ports.AdminServer)) + "\n" +
+		"reconfigEnabled=true\n" +
 		"dynamicConfigFile=/data/zoo.cfg.dynamic\n"
 }
 
