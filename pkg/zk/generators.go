@@ -287,7 +287,6 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		"autopurge.purgeInterval=" + strconv.Itoa(z.Spec.Conf.AutoPurgePurgeInterval) + "\n" +
 		"quorumListenOnAllIPs=" + strconv.FormatBool(z.Spec.Conf.QuorumListenOnAllIPs) + "\n" +
 		"admin.serverPort=" + strconv.Itoa(int(ports.AdminServer)) + "\n" +
-		"reconfigEnabled=true\n" +
 		"dynamicConfigFile=/data/zoo.cfg.dynamic\n"
 }
 
