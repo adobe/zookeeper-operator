@@ -265,7 +265,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
-		"# Test comment\n" +
+		"# Test comment 2\n" +
 		"reconfigEnabled=" + strconv.FormatBool(!z.Spec.Conf.DisableReconfigEnabled) + "\n" +
 		"skipACL=yes\n" +
 		"metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider\n" +
