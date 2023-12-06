@@ -270,7 +270,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
 		"# Test comment 2\n" +
-		"reconfigEnabled=false\n" +
+		"reconfigEnabled=true\n" +
 		//"reconfigEnabled=" + strconv.FormatBool(!z.Spec.Conf.DisableReconfigEnabled) + "\n" +
 		"skipACL=yes\n" +
 		"metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider\n" +
