@@ -148,6 +148,7 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
     echo $ZKCONFIG
     echo $MYID > $MYID_FILE
     echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
+    # TODO: append | ${additional address from geneerators}
   fi
 fi
 

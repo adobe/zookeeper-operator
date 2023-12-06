@@ -685,6 +685,12 @@ type ZookeeperConfig struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +optional
 	AdditionalConfig map[string]string `json:"additionalConfig,omitempty"`
+
+	// key-value map of additional serveraddresses to take advantage of the multiAddress.enabled option
+	// must be server.{number}: address
+	// will be in addition to the automatically configured clustered addresses
+	// +optional
+	AdditionalServerAddresses map[string]string `json:"additionalServerAddresses,omitempty"`
 }
 
 func (c *ZookeeperConfig) withDefaults() (changed bool) {

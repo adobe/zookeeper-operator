@@ -160,4 +160,4 @@ ENV PATH=$PATH:/$DISTRO_NAME/bin \
 
 COPY docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["zkServer.sh", "start-foreground"]
+CMD ["zkServer.sh", "start-foreground", "-Dzookeeper.multiAddress.enabled=true"]

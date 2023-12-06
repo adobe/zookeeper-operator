@@ -256,6 +256,10 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		zkConfig = zkConfig + fmt.Sprintf("%s=%s\n", key, value)
 	}
 
+	for key, value := range z.Spec.Conf.AdditionalServerAddresses {
+		zkConfig = zkConfig + fmt.Sprintf("#%s=%s\n", key, value)
+	}
+
 	// Disabling Dynamic Reconfig logic to keep old versions of the operator function (omitting the value in config defaults to enabling the reconfig)
 	/*var reconfigEnabled = true
 	if z.Spec.Conf.DisableReconfigEnabled {
