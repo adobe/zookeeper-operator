@@ -11,6 +11,7 @@
 package zk
 
 import (
+	"bufio"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -215,6 +216,20 @@ func MakeAdminServerService(z *v1beta1.ZookeeperCluster) *v1.Service {
 
 // MakeConfigMap returns a zookeeper config map
 func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
+	// extract additional server addresses
+	originalZkConfig := makeZkConfigString(z)
+	scanner := bufio.NewScanner(strings.NewReader(originalZkConfig))
+	zkConfig := ""
+	additionalServerAddresses := ""
+	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "server.") {
+			additionalServerAddresses += scanner.Text()
+			zkConfig += "# " + scanner.Text()
+		} else {
+			zkConfig += scanner.Text()
+		}
+	}
+
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
@@ -226,10 +241,11 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 			Labels:    z.Spec.Labels,
 		},
 		Data: map[string]string{
-			"zoo.cfg":                makeZkConfigString(z),
+			"zoo.cfg":                zkConfig,
 			"log4j.properties":       makeZkLog4JConfigString(),
 			"log4j-quiet.properties": makeZkLog4JQuietConfigString(),
 			"env.sh":                 makeZkEnvConfigString(z),
+			"zoo.cfg.dynamic":        additionalServerAddresses,
 		},
 	}
 }
@@ -256,7 +272,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 		zkConfig = zkConfig + fmt.Sprintf("%s=%s\n", key, value)
 	}
 
-	for key, value := range z.Spec.Conf.AdditionalServerAddresses {
+	/*for key, value := range z.Spec.Conf.AdditionalServerAddresses {
 		zkConfig = zkConfig + fmt.Sprintf("#%s=%s\n", key, value)
 	}
 
@@ -269,7 +285,6 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
-		"# Test comment 2\n" +
 		"reconfigEnabled=true\n" +
 		//"reconfigEnabled=" + strconv.FormatBool(!z.Spec.Conf.DisableReconfigEnabled) + "\n" +
 		"skipACL=yes\n" +
