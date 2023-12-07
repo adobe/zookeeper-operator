@@ -223,10 +223,10 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 	additionalServerAddresses := ""
 	for scanner.Scan() {
 		if strings.HasPrefix(scanner.Text(), "server.") {
-			additionalServerAddresses += scanner.Text()
-			zkConfig += "# " + scanner.Text()
+			additionalServerAddresses += scanner.Text() + "\n"
+			zkConfig += "# " + scanner.Text() + "\n"
 		} else {
-			zkConfig += scanner.Text()
+			zkConfig += scanner.Text() + "\n"
 		}
 	}
 
