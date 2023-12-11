@@ -153,6 +153,12 @@ COPY opt/zkEnv.sh  $DISTRO_NAME/bin/zkEnv.sh
 WORKDIR $DISTRO_NAME
 VOLUME ["$ZOO_DATA_DIR", "$ZOO_DATA_LOG_DIR", "$ZOO_LOG_DIR"]
 
+# overwrite default zkserver.sh in here to add multiaddress.enabled
+RUN rm /$DISTRO_NAME/bin/zkServer.sh
+COPY zkServer.sh /$DISTRO_NAME/bin/
+RUN chmod +x /$DISTRO_NAME/bin/zkServer.sh; \
+	chown zookeeper:zookeeper /$DISTRO_NAME/bin/zkServer.sh
+
 EXPOSE 2181 2888 3888 8080
 
 ENV PATH=$PATH:/$DISTRO_NAME/bin \
@@ -160,4 +166,4 @@ ENV PATH=$PATH:/$DISTRO_NAME/bin \
 
 COPY docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["zkServer.sh", "start-foreground", "-Dzookeeper.multiAddress.enabled=true"]
+CMD ["zkServer.sh", "start-foreground"]
