@@ -26,7 +26,6 @@
 # zookeeper addresses in the zookeeper-operator
 # 
 
-
 # use POSIX interface, symlink is followed automatically
 ZOOBIN="${BASH_SOURCE-$0}"
 ZOOBIN="$(dirname "${ZOOBIN}")"

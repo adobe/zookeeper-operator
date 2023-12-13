@@ -8,6 +8,10 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
+# Note: if building on Mac OS, you may need add the 
+# --platform=linux/amd64 flag to allow the image to be run in a
+# k8s environment
+
 FROM gradle:jdk17
 
 RUN mkdir /zu
@@ -17,7 +21,7 @@ RUN ./gradlew shadowJar
 
 # use forked base zookeeper 3.8.3 docker image
 # that runs on openjdk-21
-FROM castaffo/zookeeper:3.8.3-apache-multiaddresszkserver-20231212
+FROM castaffo/zookeeper:3.8.3-apache-multiaddresszkserver-amd64-20231212
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /opt/libs/

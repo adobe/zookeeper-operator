@@ -151,30 +151,34 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
   fi
 fi
 
+
 # if there is an extra address in the configuration, add it to the dynamic config
+echo Testing DYN Config stuff
+echo "# Testing" >> $DYNCONFIG
 EXTRADYNCFGFILE=/data/conf/zoo.cfg.dynamic
 echo "# checking for" > $DYNCONFIG
 if test -f $EXTRADYNCFGFILE; then
-  echo "# extraconfig present" > $DYNCONFIG
-  prefix="server.${MYID}*" # maybe "server.${MYID}="* or "server.${MYID}"*
-  while IFS= read -r line; do
-    if [[ "$line"  == "$prefix"* ]]; then # maybe $prefix* (no ")
-      echo "# extraconfig present for this server" > $DYNCONFIG
-      # trim off prefix to just get the address from https://stackoverflow.com/questions/16623835/remove-a-fixed-prefix-suffix-from-a-string-in-bash
-      EXTRAADDRESS=${line#"$prefix"}
-      # find the line in $DYNCONFIG with the servernumber and append " | new address"
-      while IFS= read -r dyn_line; do
-        # if it is the id line of the server and hasn't already had the new address added to it
-        if [[ "$dyn_line"  == "$prefix"* && "$dyn_line" != *"|"* ]]; then
-          echo "# extraconfig being added" > $DYNCONFIG
-          new_line="${dyn_line} | ${EXTRAADDRESS}"
-          echo $new_line > $DYNCONFIG
-          # delete old server line from file
-          sed -i "/${dyn_line}/d" $DYNCONFIG
-        fi
-      done < $DYNCONFIG
-    fi
-  done < $EXTRADYNCFGFILE
+  echo "# extraconfig present" >> $DYNCONFIG
+  echo "# $(head -n 1 $EXTRADYNCFGFILE)" >> $DYNCONFIG
+#  prefix="server.${MYID}*" # maybe "server.${MYID}="* or "server.${MYID}"*
+#   # while IFS= read -r line; do
+#   #   if [[ "$line"  == "$prefix"* ]]; then # maybe $prefix* (no ")
+#   #     echo "# extraconfig present for this server" > $DYNCONFIG
+#   #     # trim off prefix to just get the address from https://stackoverflow.com/questions/16623835/remove-a-fixed-prefix-suffix-from-a-string-in-bash
+#   #     EXTRAADDRESS=${line#"$prefix"}
+#   #     # find the line in $DYNCONFIG with the servernumber and append " | new address"
+#   #     while IFS= read -r dyn_line; do
+#   #       # if it is the id line of the server and hasn't already had the new address added to it
+#   #       if [[ "$dyn_line"  == "$prefix"* && "$dyn_line" != *"|"* ]]; then
+#   #         echo "# extraconfig being added" > $DYNCONFIG
+#   #         new_line="${dyn_line} | ${EXTRAADDRESS}"
+#   #         echo $new_line > $DYNCONFIG
+#   #         # delete old server line from file
+#   #         sed -i "/${dyn_line}/d" $DYNCONFIG
+#   #       fi
+#   #     done < $DYNCONFIG
+#   #   fi
+#   # done < $EXTRADYNCFGFILE
 fi
 
 if [[ "$REGISTER_NODE" == true ]]; then
@@ -204,6 +208,7 @@ cp -f /conf/env.sh $ZOOCFGDIR
 if [ -f $DYNCONFIG ]; then
   # Node registered, start server
   echo Starting zookeeper service
+  echo $(cat $DYNCONFIG)
   zkServer.sh --config $ZOOCFGDIR start-foreground
 else
   echo "Node failed to register!"
