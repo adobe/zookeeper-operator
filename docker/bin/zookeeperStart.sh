@@ -155,11 +155,11 @@ fi
 # if there is an extra address in the configuration, add it to the dynamic config
 echo Testing DYN Config stuff
 echo "# Testing" >> $DYNCONFIG
-EXTRADYNCFGFILE=/data/conf/zoo.cfg.dynamic
-echo "# checking for" > $DYNCONFIG
-if test -f $EXTRADYNCFGFILE; then
-  echo "# extraconfig present" >> $DYNCONFIG
+EXTRADYNCFGFILE=/conf/zoo.cfg.dynamic
+if [ -f $EXTRADYNCFGFILE ]; then
   echo "# $(head -n 1 $EXTRADYNCFGFILE)" >> $DYNCONFIG
+fi
+
 #  prefix="server.${MYID}*" # maybe "server.${MYID}="* or "server.${MYID}"*
 #   # while IFS= read -r line; do
 #   #   if [[ "$line"  == "$prefix"* ]]; then # maybe $prefix* (no ")
@@ -179,7 +179,6 @@ if test -f $EXTRADYNCFGFILE; then
 #   #     done < $DYNCONFIG
 #   #   fi
 #   # done < $EXTRADYNCFGFILE
-fi
 
 if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
