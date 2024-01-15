@@ -244,7 +244,7 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 			"log4j.properties":       makeZkLog4JConfigString(),
 			"log4j-quiet.properties": makeZkLog4JQuietConfigString(),
 			"env.sh":                 makeZkEnvConfigString(z),
-			"zoo.cfg.dynamic":        additionalServerAddresses,
+			"addServerAddresses.txt": additionalServerAddresses,
 		},
 	}
 }
