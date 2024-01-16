@@ -138,7 +138,7 @@ else
 fi
 
 echo Testing DYN Config stuff
-EXTRADYNCFGFILE=/conf/addServerAddresses.txt
+EXTRAADDRESSGFILE=/conf/addServerAddresses.txt
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
@@ -152,7 +152,7 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
 
     prefix="server.${MYID}="
     suffix=";2181"
-    if [ -f $EXTRADYNCFGFILE ]; then
+    if [ -f $EXTRAADDRESSGFILE ]; then
       echo "Extra server addresses present"
       while IFS= read -r line; do
         # TODO: consider the case where they don't provide an extra address for that specific node
@@ -161,75 +161,27 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
           ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
           echo "server.${MYID}=${ORIGINALADDRESS} | ${EXTRAADDRESS}" > $DYNCONFIG
         fi
-      done < $EXTRADYNCFGFILE
+      done < $EXTRAADDRESSGFILE
+      # Case where an extra address is not provided for this specific znode
+      if ! grep $prefix $EXTRAADDRESSGFILE; then
+        echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
+      fi
     else
       echo "Writing server address to dynamic config"
       echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
     fi
-    # echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
+    # IDEA: for MYID add 0's to regular zoo.cfg
+    
   fi
 fi
-
-# TODO: maybe put this back in write configuration if the addresses get repeated
-# if there is an extra address in the configuration, add it to the dynamic config
-
-
-# echo Testing DYN Config stuff
-# EXTRADYNCFGFILE=/conf/zoo.cfg.dynamic
-# if [ -f $EXTRADYNCFGFILE ]; then
-#   # echo "# $(head -n 1 $EXTRADYNCFGFILE)" >> $DYNCONFIG
-#   prefix="server.${MYID}=" # maybe "server.${MYID}="* or "server.${MYID}"*
-#   # echo "# $prefix" >> $DYNCONFIG
-#   suffix=";2181"
-#   while IFS= read -r line; do
-#     if [[ "$line"  == "$prefix"* ]]; then
-#       # trim off prefix to just get the address from https://stackoverflow.com/questions/16623835/remove-a-fixed-prefix-suffix-from-a-string-in-bash
-#       EXTRAADDRESS=${line#"$prefix"}
-#       # find the line in $DYNCONFIG with the servernumber and append " | new address"
-#       while IFS= read -r dyn_line; do
-#         # if it is the id line of the server and hasn't already had the new address added to it
-#         if [[ "$dyn_line"  == "$prefix"* && "$dyn_line" != *"|"* ]]; then
-#           new_line=${dyn_line%"$suffix"}
-#           new_line="${new_line} | ${EXTRAADDRESS}"
-#           # delete old server line from file and add new one
-#           sed -i "/${dyn_line}/d" $DYNCONFIG
-#           echo $new_line >> $DYNCONFIG
-#         fi
-#       done < $DYNCONFIG
-#     fi
-#   done < $EXTRADYNCFGFILE
-#   # test explicit writing
-#   if [[ "$MYID" == *"1"* ]]; then
-#     # echo "# true" >> $DYNCONFIG
-#     echo "server.2=app-zookeeper-1.app-zookeeper-headless.ns-team-experience-platform--query-service-zookeeper--55fa4ea9.svc.cluster.local:2888:3888:participant | query-service-int-zookeeper-1.ethos12-stage-va7.ethos.adobe.net:2888:3888:participant;0.0.0.0:2181" >> $DYNCONFIG
-#   fi
-# fi
-
-#  prefix="server.${MYID}*" # maybe "server.${MYID}="* or "server.${MYID}"*
-#   # while IFS= read -r line; do
-#   #   if [[ "$line"  == "$prefix"* ]]; then # maybe $prefix* (no ")
-#   #     echo "# extraconfig present for this server" > $DYNCONFIG
-#   #     # trim off prefix to just get the address from https://stackoverflow.com/questions/16623835/remove-a-fixed-prefix-suffix-from-a-string-in-bash
-#   #     EXTRAADDRESS=${line#"$prefix"}
-#   #     # find the line in $DYNCONFIG with the servernumber and append " | new address"
-#   #     while IFS= read -r dyn_line; do
-#   #       # if it is the id line of the server and hasn't already had the new address added to it
-#   #       if [[ "$dyn_line"  == "$prefix"* && "$dyn_line" != *"|"* ]]; then
-#   #         echo "# extraconfig being added" > $DYNCONFIG
-#   #         new_line="${dyn_line} | ${EXTRAADDRESS}"
-#   #         echo $new_line > $DYNCONFIG
-#   #         # delete old server line from file
-#   #         sed -i "/${dyn_line}/d" $DYNCONFIG
-#   #       fi
-#   #     done < $DYNCONFIG
-#   #   fi
-#   # done < $EXTRADYNCFGFILE
 
 # maybe register it here as well
 if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
+    echo "ZKURL: ${ZKURL}"
+    echo "ZKCONFIG: ${ZKCONFIG}"
     set -e
     echo Registering node and writing local configuration to disk.
     java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
