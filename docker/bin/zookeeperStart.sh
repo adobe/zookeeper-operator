@@ -146,10 +146,7 @@ if [ -f $EXTRAADDRESSFILE ]; then
     # TODO: consider the case where they don't provide an extra address for that specific node
     if [[ "$line"  == "$prefix"* ]]; then
       EXTRAADDRESS=${line#"$prefix"}
-      echo "This is the extra address: ${EXTRAADDRESS}" >> /data/debug,txt
       EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-      echo "This is the extra config; ${EXTRACONFIG}" >> /data/debug,txt
-
       # echo "Here is the zkconfig: ${ZKCONFIG}" >> /data/debug,txt
       # ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
       # echo "Here is the original addrress: : ${ORIGINALADDRESS}" >> /data/debug,txt
@@ -158,8 +155,6 @@ if [ -f $EXTRAADDRESSFILE ]; then
   done < $EXTRAADDRESSFILE
 fi
 
-echo Testing DYN Config stuff
-EXTRAADDRESSFILE=/conf/addServerAddresses.txt
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
@@ -174,7 +169,7 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
 
     prefix="server.${MYID}="
     suffix=";2181"
-    if [ -n $EXTRACONFIG ]; then
+    if [ -n "$EXTRACONFIG" ]; then
       echo "Extra server addresses present"
       # TODO: consider the case where they don't provide an extra address for that specific node
       # if [[ "$line"  == "$prefix"* ]]; then
@@ -198,12 +193,11 @@ fi
 
 # maybe register it here as well
 if [[ "$REGISTER_NODE" == true ]]; then
-    echo "registering" >> /data/debug,txt
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     # next: maybe try quotes
-    if [ -n $EXTRACONFIG ]; then
+    if [ -n "$EXTRACONFIG" ]; then
       suffix=";2181"
       # echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
       # ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"

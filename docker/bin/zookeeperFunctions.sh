@@ -33,3 +33,5 @@ function zkConnectionString() {
     echo "${CLIENT_HOST}:${CLIENT_PORT}"
   fi
 }
+
+# TODO: add a function for getting extra addresses
