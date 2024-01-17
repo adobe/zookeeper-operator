@@ -87,10 +87,18 @@ if [[ "$OK" == "imok" ]]; then
       echo "Zookeeper service is available and an active participant"
       exit 0
     elif [[ "$ROLE" == "observer" ]]; then
+      # TODO: add logic for extra address here
       echo "Zookeeper service is ready to be upgraded from observer to participant."
       ROLE=participant
       ZKURL=$(zkConnectionString)
       ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
+      if [ -n $EXTRACONFIG ]; then
+        suffix=";2181"
+        echo "following is for live"
+        echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
+        ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"
+        echo "new zkconfig: ${ZKCONFIG}" >> /data/debug,txt
+      fi
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar remove $ZKURL $MYID
       sleep 1
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG
