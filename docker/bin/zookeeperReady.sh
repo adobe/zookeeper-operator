@@ -95,20 +95,11 @@ if [[ "$OK" == "imok" ]]; then
 
       # if there is an extra address, add it to the ZKCONFIG
       if [ -f $EXTRAADDRESSFILE ]; then
-        echo "ZKREADY Extra server addresses present" >> /data/debug,txt
         prefix="server.${MYID}="
         while IFS= read -r line; do
-          # TODO: consider the case where they don't provide an extra address for that specific node
           if [[ "$line"  == "$prefix"* ]]; then
             EXTRAADDRESS=${line#"$prefix"}
-            echo "This is the extra address: ${EXTRAADDRESS}" >> /data/debug,txt
             EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-            echo "This is the extra config; ${EXTRACONFIG}" >> /data/debug,txt
-
-            # echo "Here is the zkconfig: ${ZKCONFIG}" >> /data/debug,txt
-            # ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
-            # echo "Here is the original addrress: : ${ORIGINALADDRESS}" >> /data/debug,txt
-            # echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
           fi
         done < $EXTRAADDRESSFILE
 
@@ -117,11 +108,11 @@ if [[ "$OK" == "imok" ]]; then
           suffix=";2181"
           echo "following is for live"
           echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
-          ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG}"
+          ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix};0.0.0.0:2181" # TODO: might not need this
           echo "new zkconfig: ${ZKCONFIG}" >> /data/debug,txt
         fi
       fi
-
+      
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar remove $ZKURL $MYID
       sleep 1
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG

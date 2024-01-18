@@ -137,20 +137,14 @@ else
   fi
 fi
 
-# Find extra address for the node
+# Find extra address for the node if there is one
 EXTRAADDRESSFILE=/conf/addServerAddresses.txt
 if [ -f $EXTRAADDRESSFILE ]; then
-  echo "Extra server addresses present"
   prefix="server.${MYID}="
   while IFS= read -r line; do
-    # TODO: consider the case where they don't provide an extra address for that specific node
     if [[ "$line"  == "$prefix"* ]]; then
       EXTRAADDRESS=${line#"$prefix"}
       EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-      # echo "Here is the zkconfig: ${ZKCONFIG}" >> /data/debug,txt
-      # ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
-      # echo "Here is the original addrress: : ${ORIGINALADDRESS}" >> /data/debug,txt
-      # echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
     fi
   done < $EXTRAADDRESSFILE
 fi
@@ -171,18 +165,8 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
     suffix=";2181"
     if [ -n "$EXTRACONFIG" ]; then
       echo "Extra server addresses present"
-      # TODO: consider the case where they don't provide an extra address for that specific node
-      # if [[ "$line"  == "$prefix"* ]]; then
-      # EXTRAADDRESS=${line#"$prefix"}
-      # echo "This is the extra address: ${EXTRAADDRESS}" >> /data/debug,txt
-      # EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-      # echo "This is the extra config; ${EXTRACONFIG}" >> /data/debug,txt
-
-      # echo "Here is the zkconfig: ${ZKCONFIG}" >> /data/debug,txt
       ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
-      echo "Here is the original addrress: : ${ORIGINALADDRESS}" >> /data/debug,txt
       echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
-      # Case where an extra address is not provided for this specific znode
     else
       echo "Writing server address to dynamic config"
       echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
@@ -200,8 +184,7 @@ if [[ "$REGISTER_NODE" == true ]]; then
     if [ -n "$EXTRACONFIG" ]; then
       suffix=";2181"
       # echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
-      # ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"
-      # echo "new zkconfig: ${ZKCONFIG}"
+      ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"
     fi
     echo "ZKURL: ${ZKURL}"
     echo "ZKCONFIG: ${ZKCONFIG}"

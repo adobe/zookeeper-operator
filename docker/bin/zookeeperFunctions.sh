@@ -35,3 +35,5 @@ function zkConnectionString() {
 }
 
 # TODO: add a function for getting extra addresses
+# need to raise an exception if role isn't set but an address is found
+
