@@ -137,17 +137,7 @@ else
   fi
 fi
 
-# Find extra address for the node if there is one
-EXTRAADDRESSFILE=/conf/addServerAddresses.txt
-if [ -f $EXTRAADDRESSFILE ]; then
-  prefix="server.${MYID}="
-  while IFS= read -r line; do
-    if [[ "$line"  == "$prefix"* ]]; then
-      EXTRAADDRESS=${line#"$prefix"}
-      EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-    fi
-  done < $EXTRAADDRESSFILE
-fi
+EXTRACONFIG=$(myExtraAddress)
 
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
@@ -180,10 +170,8 @@ if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
-    # next: maybe try quotes
     if [ -n "$EXTRACONFIG" ]; then
       suffix=";2181"
-      # echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
       ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"
     fi
     echo "ZKURL: ${ZKURL}"
