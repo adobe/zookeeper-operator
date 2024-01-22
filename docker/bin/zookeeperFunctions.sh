@@ -34,7 +34,6 @@ function zkConnectionString() {
   fi
 }
 
-# TODO: add a function for getting extra addresses
 # need to raise an exception if role isn't set but an address is found
 function myExtraAddress() {
   EXTRAADDRESSFILE=/conf/addServerAddresses.txt
@@ -47,7 +46,7 @@ function myExtraAddress() {
       fi
     done < $EXTRAADDRESSFILE
   fi
-  
+
   if [ -n "$EXTRACONFIG" ]; then
     echo "$EXTRACONFIG"
   fi

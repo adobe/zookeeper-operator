@@ -137,6 +137,7 @@ else
   fi
 fi
 
+# if there is an extra address provided for the node, get it to be used
 EXTRACONFIG=$(myExtraAddress)
 
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
@@ -195,6 +196,7 @@ fi
 cp -f /conf/log4j.properties $ZOOCFGDIR
 cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
 cp -f /conf/env.sh $ZOOCFGDIR
+cp -f /conf/addServerAddresses.txt $ZOOCFGDIR
 
 if [ -f $DYNCONFIG ]; then
   # Node registered, start server
