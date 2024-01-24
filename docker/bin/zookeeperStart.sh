@@ -145,6 +145,8 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo $MYID > $MYID_FILE
   if [[ $MYID -eq $OFFSET && -z "$SEED_NODE" ]]; then
     ROLE=participant
+    # if there is an extra address provided for the node, get it to be used
+    EXTRACONFIG=$(myExtraAddress)
     echo Initial initialization of ordinal 0 pod, creating new config.
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     echo Writing bootstrap configuration with the following config:
@@ -153,16 +155,15 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
     echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
 
     prefix="server.${MYID}="
-    suffix=";2181"
+    suffix=";${CLIENT_PORT}"
     if [ -n "$EXTRACONFIG" ]; then
       echo "Extra server addresses present"
       ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
-      echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
+      echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG%$suffix}" > $DYNCONFIG
     else
       echo "Writing server address to dynamic config"
       echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
     fi
-    # IDEA: for MYID add 0's to regular zoo.cfg
   fi
 fi
 
@@ -171,9 +172,11 @@ if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
+    # if there is an extra address provided for the node, get it to be used
+    EXTRACONFIG=$(myExtraAddress)
     if [ -n "$EXTRACONFIG" ]; then
-      suffix=";2181"
-      ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix}${ROLE}${suffix}"
+      suffix=";${CLIENT_PORT}"
+      ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG}"
     fi
     echo "ZKURL: ${ZKURL}"
     echo "ZKCONFIG: ${ZKCONFIG}"

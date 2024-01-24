@@ -34,15 +34,35 @@ function zkConnectionString() {
   fi
 }
 
-# need to raise an exception if role isn't set but an address is found
 function myExtraAddress() {
   EXTRAADDRESSFILE=/conf/addServerAddresses.txt
   if [ -f $EXTRAADDRESSFILE ]; then
     prefix="server.${MYID}="
     while IFS= read -r line; do
       if [[ "$line"  == "$prefix"* ]]; then
+        cat "line found" >> /data/test.txt
         EXTRAADDRESS=${line#"$prefix"}
-        EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
+        # if extra address has a '|' in it (multiple addresses included)
+        if  [[ "$EXTRAADDRESS" == *"|"* ]]; then
+          # split at pipe
+          suffix=";${CLIENT_PORT}"
+          IFS="|"
+          read -ra addresses <<< "$EXTRAADDRESS"
+          # add quorum and leader ports
+          EXTRACONFIG=""
+          for address in "${addresses[@]}"; do
+            address_config=$(zkConfig $address)
+            EXTRACONFIG+="${EXTRACONFIG}${address_config%$suffix}|"
+          done
+          # remove last pipe and add the clientport back in
+          pipe="|"
+          EXTRACONFIG="${EXTRACONFIG%$pipe}${suffix}"
+          IFS=
+        else
+          cat $EXTRAADDRESS >> /data/test.txt
+          EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
+          cat $EXTRACONFIG >> /data/test.txt
+        fi
       fi
     done < $EXTRAADDRESSFILE
   fi

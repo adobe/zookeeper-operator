@@ -96,10 +96,10 @@ if [[ "$OK" == "imok" ]]; then
       EXTRACONFIG=$(myExtraAddress)
       if [ -n "$EXTRACONFIG" ]; then
         echo "ZKREADY Extra config for this node present" >> /data/debug,txt
-        suffix=";2181"
+        suffix=";${CLIENT_PORT}"
         echo "following is for live"
         echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
-        ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG%$suffix};0.0.0.0:2181" # TODO: might not need this
+        ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG}" # TODO: might not need this
         echo "new zkconfig: ${ZKCONFIG}" >> /data/debug,txt
       fi
 
