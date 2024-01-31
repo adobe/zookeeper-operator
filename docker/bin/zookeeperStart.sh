@@ -137,9 +137,6 @@ else
   fi
 fi
 
-# if there is an extra address provided for the node, get it to be used
-EXTRACONFIG=$(myExtraAddress)
-
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
@@ -159,7 +156,7 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
     if [ -n "$EXTRACONFIG" ]; then
       echo "Extra server addresses present"
       ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
-      echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG%$suffix}" > $DYNCONFIG
+      echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
     else
       echo "Writing server address to dynamic config"
       echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
@@ -204,7 +201,6 @@ cp -f /conf/addServerAddresses.txt $ZOOCFGDIR
 if [ -f $DYNCONFIG ]; then
   # Node registered, start server
   echo Starting zookeeper service
-  echo $(cat $DYNCONFIG)
   zkServer.sh --config $ZOOCFGDIR start-foreground
 else
   echo "Node failed to register!"

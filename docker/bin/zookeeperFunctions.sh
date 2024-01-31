@@ -35,12 +35,12 @@ function zkConnectionString() {
 }
 
 function myExtraAddress() {
+  # NOTE: must have ROLE defined
   EXTRAADDRESSFILE=/conf/addServerAddresses.txt
   if [ -f $EXTRAADDRESSFILE ]; then
     prefix="server.${MYID}="
     while IFS= read -r line; do
       if [[ "$line"  == "$prefix"* ]]; then
-        cat "line found" >> /data/test.txt
         EXTRAADDRESS=${line#"$prefix"}
         # if extra address has a '|' in it (multiple addresses included)
         if  [[ "$EXTRAADDRESS" == *"|"* ]]; then
@@ -59,9 +59,7 @@ function myExtraAddress() {
           EXTRACONFIG="${EXTRACONFIG%$pipe}${suffix}"
           IFS=
         else
-          cat $EXTRAADDRESS >> /data/test.txt
           EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
-          cat $EXTRACONFIG >> /data/test.txt
         fi
       fi
     done < $EXTRAADDRESSFILE
