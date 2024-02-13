@@ -217,6 +217,7 @@ func MakeAdminServerService(z *v1beta1.ZookeeperCluster) *v1.Service {
 // MakeConfigMap returns a zookeeper config map
 func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 	// extract additional server addresses
+	// NOTE: to use the multiaddress feature, you must have have "-Dzookeeper.multiAddress.enabled=true" passed in to the SERVER_JVMFLAGS pod env variable
 	originalZkConfig := makeZkConfigString(z)
 	scanner := bufio.NewScanner(strings.NewReader(originalZkConfig))
 	zkConfig := ""
