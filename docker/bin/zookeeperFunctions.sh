@@ -35,7 +35,7 @@ function zkConnectionString() {
 }
 
 function myExtraAddress() {
-  # NOTE: must have ROLE defined test gh access
+  # NOTE: must have ROLE defined
   EXTRAADDRESSFILE=/conf/addServerAddresses.txt
   if [ -f $EXTRAADDRESSFILE ]; then
     prefix="server.${MYID}="
