@@ -11,16 +11,15 @@
 package main
 
 import (
-	"context"
-	"errors"
+	"crypto/md5"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
 
 	zkConfig "github.com/pravega/zookeeper-operator/pkg/controller/config"
-	"github.com/pravega/zookeeper-operator/pkg/utils"
 	"github.com/pravega/zookeeper-operator/pkg/version"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
 	"github.com/sirupsen/logrus"
@@ -31,7 +30,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
@@ -62,7 +60,10 @@ func printVersion() {
 
 func main() {
 	var metricsAddr string
+	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "127.0.0.1:6000", "The address the metric endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
+		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -99,29 +100,14 @@ func main() {
 		managerNamespaces = ns
 	}
 
-	// Get a config to talk to the apiserver
-	cfg, err := config.GetConfig()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	operatorNs, err := GetOperatorNamespace()
-	if err != nil {
-		log.Error(err, "failed to get operator namespace")
-		os.Exit(1)
-	}
-
-	// Become the leader before proceeding
-	err = utils.BecomeLeader(context.TODO(), cfg, "zookeeper-operator-lock", operatorNs)
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
+	// create uniq leaderElectionID per deployment. a deployment watches a uniq set of namespaces
+	leaderElectionID := fmt.Sprintf("%s-%s", "zookeeper-operator-lock", StringMd5Hash(namespaces))
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		Cache:              cache.Options{Namespaces: managerNamespaces},
 		MetricsBindAddress: metricsAddr,
+		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   leaderElectionID,
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
@@ -160,14 +146,8 @@ func getWatchNamespace() (string, error) {
 	return ns, nil
 }
 
-func GetOperatorNamespace() (string, error) {
-	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", errors.New("file does not exist")
-		}
-		return "", err
-	}
-	ns := strings.TrimSpace(string(nsBytes))
-	return ns, nil
+func StringMd5Hash(s string) string {
+	h := md5.New()
+	io.WriteString(h, s)
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
