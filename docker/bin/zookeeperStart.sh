@@ -41,6 +41,7 @@ MYID=$(($ORD+$OFFSET))
 # use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
+CLIENT_PORT=${SEED_PORT:-$CLIENT_PORT}
 
 
 # use FQDN_TEMPLATE to create an OUTSIDE_NAME that is going to be used to establish quorum election
