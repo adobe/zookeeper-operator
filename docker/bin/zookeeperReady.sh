@@ -26,7 +26,7 @@ OFFSET=${OFFSET:-1}
 # use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
-
+CLIENT_PORT=${SEED_PORT:-$CLIENT_PORT}
 
 OK=$(echo ruok | socat stdio tcp:localhost:$CLIENT_PORT)
 
