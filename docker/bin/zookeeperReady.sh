@@ -19,6 +19,7 @@ DATA_DIR=/data
 MYID_FILE=$DATA_DIR/myid
 LOG4J_CONF=/conf/log4j-quiet.properties
 STATIC_CONFIG=/data/conf/zoo.cfg
+EXTRAADDRESSFILE=/conf/addServerAddresses.txt
 
 # used when zkid starts from value grater then 1, default 1
 OFFSET=${OFFSET:-1}
@@ -91,6 +92,17 @@ if [[ "$OK" == "imok" ]]; then
       ROLE=participant
       ZKURL=$(zkConnectionString)
       ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
+
+      EXTRACONFIG=$(myExtraAddress)
+      if [ -n "$EXTRACONFIG" ]; then
+        echo "ZKREADY Extra config for this node present" >> /data/debug,txt
+        suffix=";${CLIENT_PORT}"
+        echo "following is for live"
+        echo "extra address: ${EXTRACONFIG}" >> /data/debug,txt
+        ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG}" # TODO: might not need this
+        echo "new zkconfig: ${ZKCONFIG}" >> /data/debug,txt
+      fi
+
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar remove $ZKURL $MYID
       sleep 1
       java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG

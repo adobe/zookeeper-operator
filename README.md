@@ -31,6 +31,7 @@ The project is currently alpha. While no breaking API changes are currently plan
       - [Uninstall via helm](#uninstall-via-helm-1)
       - [Manual uninstall](#manual-uninstall-1)
     - [The AdminServer](#the-adminserver)
+    - [Using Multiple Addresses per ZK Server](#using-multiple-addresses-per-zk-server)
   - [Development](#development)
     - [Build the operator image](#build-the-operator-image)
     - [Direct access to the cluster](#direct-access-to-the-cluster)
@@ -384,8 +385,44 @@ The list of available commands are
 /commands/zabstate
 ```
 
-## Development
+### Using Multiple Addresses Per ZK Server
+The zookeeper pods discover eachother by their internal kubernetes addresses. To take adavantage of zookeeper's [mutltiAddress cluster option](https://zookeeper.apache.org/doc/r3.9.1/zookeeperAdmin.html#sc_clusterOptions) and have the zookeeper pods represented by more than just their internal addresses, first add the `-Dzookeeper.multiAddress.enabled=true` flag to the value of the `SERVER_JVMFLAGS` env variable in your pod definition.
+```
+pod:
+  ...
+  env:
+    - name: SERVER_JVMFLAGS
+      value: "-Dzookeeper.multiAddress.enabled=true"
 
+```
+Then add your additional addresses to the `config` definition of your `ZookeeperCluster` CRD in the format `server.<id>: <address1>|<address2>|...`
+```
+config:
+  ...
+  additionalConfig {
+    server.1: "zoo1-net1.net|zoo1-net2.net",
+    server.2: "zoo2-net1.net",
+    server.4: "zoo4-net1.net|zoo4-net2.net|zoo4-net3.net"
+  }
+```
+To verify, port forward one of your zookeeper pod's client port to your local mahcine
+```
+$ kubectl port-forward -n default zookeeper-0 2181:2181
+```
+In a seperate terminal window run the 4 letter command conf to see the cluster's server addresses:
+```
+$ echo conf | nc localhost 2181
+...
+membership: 
+server.1=app-zookeeper-0.app-zookeeper-headless.namespace.svc.cluster.local:2888:3888:participant|zoo1-net1.net:2888:3888|zoo1-net2.net:2888:3888:participant;0.0.0.0:2181
+server.2=app-zookeeper-0.app-zookeeper-headless.namespace.svc.cluster.local:2888:3888:participant|zoo2-net1.net:2888:3888:participant;0.0.0.0:2181
+server.3=app-zookeeper-0.app-zookeeper-headless.namespace.svc.cluster.local:2888:3888:participant;0.0.0.0:2181
+server.4=app-zookeeper-0.app-zookeeper-headless.namespace.svc.cluster.local:2888:3888:participant|zoo4-net1.net:2888:3888:participant|zoo4-net2.net:2888:3888:participant|zoo4-net3.net:2888:3888:participant;0.0.0.0:2181
+server.5=app-zookeeper-0.app-zookeeper-headless.namespace.svc.cluster.local:2888:3888:participant;0.0.0.0:2181
+
+```
+
+## Development
 ### Build the operator image
 
 Requirements:

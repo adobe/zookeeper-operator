@@ -142,19 +142,41 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo $MYID > $MYID_FILE
   if [[ $MYID -eq $OFFSET && -z "$SEED_NODE" ]]; then
     ROLE=participant
+    # if there is an extra address provided for the node, get it to be used
+    EXTRACONFIG=$(myExtraAddress)
     echo Initial initialization of ordinal 0 pod, creating new config.
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     echo Writing bootstrap configuration with the following config:
     echo $ZKCONFIG
     echo $MYID > $MYID_FILE
     echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
+
+    prefix="server.${MYID}="
+    suffix=";${CLIENT_PORT}"
+    if [ -n "$EXTRACONFIG" ]; then
+      echo "Extra server addresses present"
+      ORIGINALADDRESS=${ZKCONFIG%"$suffix"}
+      echo "server.${MYID}=${ORIGINALADDRESS}|${EXTRACONFIG}" > $DYNCONFIG
+    else
+      echo "Writing server address to dynamic config"
+      echo "server.${MYID}=${ZKCONFIG}" > $DYNCONFIG
+    fi
   fi
 fi
 
+# maybe register it here as well
 if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
+    # if there is an extra address provided for the node, get it to be used
+    EXTRACONFIG=$(myExtraAddress)
+    if [ -n "$EXTRACONFIG" ]; then
+      suffix=";${CLIENT_PORT}"
+      ZKCONFIG="${ZKCONFIG%$suffix}|${EXTRACONFIG}"
+    fi
+    echo "ZKURL: ${ZKURL}"
+    echo "ZKCONFIG: ${ZKCONFIG}"
     set -e
     echo Registering node and writing local configuration to disk.
     java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
@@ -174,6 +196,7 @@ fi
 cp -f /conf/log4j.properties $ZOOCFGDIR
 cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
 cp -f /conf/env.sh $ZOOCFGDIR
+cp -f /conf/addServerAddresses.txt $ZOOCFGDIR
 
 if [ -f $DYNCONFIG ]; then
   # Node registered, start server

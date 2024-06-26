@@ -33,3 +33,39 @@ function zkConnectionString() {
     echo "${CLIENT_HOST}:${CLIENT_PORT}"
   fi
 }
+
+function myExtraAddress() {
+  # NOTE: must have ROLE defined
+  EXTRAADDRESSFILE=/conf/addServerAddresses.txt
+  if [ -f $EXTRAADDRESSFILE ]; then
+    prefix="server.${MYID}="
+    while IFS= read -r line; do
+      if [[ "$line"  == "$prefix"* ]]; then
+        EXTRAADDRESS=${line#"$prefix"}
+        # if extra address has a '|' in it (multiple addresses included)
+        if  [[ "$EXTRAADDRESS" == *"|"* ]]; then
+          # split at pipe
+          suffix=";${CLIENT_PORT}"
+          IFS="|"
+          read -ra addresses <<< "$EXTRAADDRESS"
+          # add quorum and leader ports
+          EXTRACONFIG=""
+          for address in "${addresses[@]}"; do
+            address_config=$(zkConfig $address)
+            EXTRACONFIG+="${EXTRACONFIG}${address_config%$suffix}|"
+          done
+          # remove last pipe and add the clientport back in
+          pipe="|"
+          EXTRACONFIG="${EXTRACONFIG%$pipe}${suffix}"
+          IFS=
+        else
+          EXTRACONFIG=$(zkConfig $EXTRAADDRESS)
+        fi
+      fi
+    done < $EXTRAADDRESSFILE
+  fi
+
+  if [ -n "$EXTRACONFIG" ]; then
+    echo "$EXTRACONFIG"
+  fi
+}

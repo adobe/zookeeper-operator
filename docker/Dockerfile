@@ -8,6 +8,10 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
+# Note: if building on Mac OS, you may need add the 
+# --platform=linux/amd64 flag to allow the image to be run in a
+# k8s environment
+
 FROM gradle:jdk17
 
 RUN mkdir /zu

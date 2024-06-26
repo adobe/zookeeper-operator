@@ -11,6 +11,7 @@
 package zk
 
 import (
+	"bufio"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -215,6 +216,20 @@ func MakeAdminServerService(z *v1beta1.ZookeeperCluster) *v1.Service {
 
 // MakeConfigMap returns a zookeeper config map
 func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
+	// extract additional server addresses
+	// NOTE: to use the multiaddress feature, you must have have "-Dzookeeper.multiAddress.enabled=true" passed in to the SERVER_JVMFLAGS pod env variable
+	originalZkConfig := makeZkConfigString(z)
+	scanner := bufio.NewScanner(strings.NewReader(originalZkConfig))
+	zkConfig := ""
+	additionalServerAddresses := ""
+	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "server.") {
+			additionalServerAddresses += scanner.Text() + "\n"
+		} else {
+			zkConfig += scanner.Text() + "\n"
+		}
+	}
+
 	return &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
@@ -226,10 +241,11 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 			Labels:    z.Spec.Labels,
 		},
 		Data: map[string]string{
-			"zoo.cfg":                makeZkConfigString(z),
+			"zoo.cfg":                zkConfig,
 			"log4j.properties":       makeZkLog4JConfigString(),
 			"log4j-quiet.properties": makeZkLog4JQuietConfigString(),
 			"env.sh":                 makeZkEnvConfigString(z),
+			"addServerAddresses.txt": additionalServerAddresses,
 		},
 	}
 }
@@ -255,6 +271,7 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	for key, value := range z.Spec.Conf.AdditionalConfig {
 		zkConfig = zkConfig + fmt.Sprintf("%s=%s\n", key, value)
 	}
+
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
 		"standaloneEnabled=false\n" +
