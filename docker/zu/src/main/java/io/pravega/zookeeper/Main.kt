@@ -50,6 +50,7 @@ fun runSync(args: Array<String>, suppressOutput: Boolean = false): String {
       if (! suppressOutput) {
           print(clusterSize)
       }
+      zk.close()
       clusterSize
     } catch (e: Exception) {
       System.err.println("Error performing zookeeper sync operation:")
@@ -71,6 +72,7 @@ fun runGetAll(args: Array<String>, suppressOutput: Boolean = false): String {
         if (! suppressOutput) {
             print(zkCfg)
         }
+        zk.close()
         zkCfg
     } catch (e: Exception) {
         System.err.println("Error getting server config")
@@ -129,6 +131,7 @@ fun reconfigure(zkUrl: String, joining: String?, leaving: String?, outputFile: S
         } else {
             File(outputFile).bufferedWriter().use {it.write(cfgStr + "\n")}
         }
+        zk.close()
     } catch (e: Exception) {
         System.err.println("Error performing zookeeper reconfiguration:")
         e.printStackTrace(System.err)

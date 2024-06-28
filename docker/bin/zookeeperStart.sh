@@ -158,7 +158,13 @@ if [[ "$REGISTER_NODE" == true ]]; then
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     set -e
     echo Registering node and writing local configuration to disk.
-    java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
+    SSL_OPTIONS="-Dzookeeper.clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty -Dzookeeper.client.secure=true"
+    if [ "$ZKURL" =~ ":2182$" ]; then
+      ZK_OPTIONS="$SSL_OPTIONS"
+    else
+      ZK_OPTIONS=""
+    fi
+    java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
     set +e
 fi
 
