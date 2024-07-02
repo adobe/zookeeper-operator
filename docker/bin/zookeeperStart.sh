@@ -42,6 +42,7 @@ MYID=$(($ORD+$OFFSET))
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
 CLIENT_PORT=${SEED_PORT:-$CLIENT_PORT}
+echo "CLIENT_HOST = $CLIENT_HOST, CLIENT_PORT = $CLIENT_PORT, SEED_PORT = $SEED_PORT" # REMOVE
 
 
 # use FQDN_TEMPLATE to create an OUTSIDE_NAME that is going to be used to establish quorum election
@@ -66,6 +67,7 @@ ONDISK_MYID_CONFIG=false
 ONDISK_DYN_CONFIG=false
 
 # Check validity of on-disk configuration
+echo "EXISTING_ID = $EXISTING_ID, MYID = $MYID" # REMOVE
 if [ -f $MYID_FILE ]; then
   EXISTING_ID="`cat $DATA_DIR/myid`"
   if [[ "$EXISTING_ID" == "$MYID" && -f $STATIC_CONFIG ]]; then
@@ -74,7 +76,7 @@ if [ -f $MYID_FILE ]; then
   fi
 fi
 
-if [ -f $DYNCONFIG ]; then
+if [ -f $DYNCONFIG ] && [ -z $SEED_NODE ]; then
   ONDISK_DYN_CONFIG=true
 fi
 
@@ -128,15 +130,21 @@ fi
 
 if [[ "$ACTIVE_ENSEMBLE" == false ]]; then
   # This is the first node being added to the cluster or headless service not yet available
+  echo "Active_Ensemble = $ACTIVE_ENSEMBLE, register_node false" #REMOVE
   REGISTER_NODE=false
 else
   # An ensemble exists, check to see if this node is already a member.
+  echo "ONDISK_MYID_CONFIG = $ONDISK_MYID_CONFIG, ONDISK_DYN_CONFIG = $ONDISK_DYN_CONFIG" #REMOVE
   if [[ "$ONDISK_MYID_CONFIG" == false || "$ONDISK_DYN_CONFIG" == false ]]; then
     REGISTER_NODE=true
   else
     REGISTER_NODE=false
   fi
 fi
+
+echo "======= WRITE CONFIG DEBUG ======" # REMOVE
+echo "write configuration = $WRITE_CONFIGURATION" # REMOVE
+echo "myID = $MYID, SEED_NODE = $SEED_NODE, OFFSET = $OFFSET" # REMOVE
 
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
@@ -152,19 +160,26 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
   fi
 fi
 
+echo "DYNAMIC CONFIG = " # REMOVE
+cat $DYNCONFIG # REMOVE
+
+    echo "REGISTER NODE BEFORE SCRIPT = $REGISTER_NODE" # REMOVE
 if [[ "$REGISTER_NODE" == true ]]; then
+    echo "BEGIN SSL CONNECTION DEBUG" # REMOVE
+    echo "register_node " + $REGISTER_NODE # REMOVE
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     set -e
+    echo "ZKURL= " + $ZKURL # REMOVE
     echo Registering node and writing local configuration to disk.
     SSL_OPTIONS="-Dzookeeper.clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty -Dzookeeper.client.secure=true"
-    if [ "$ZKURL" =~ ":2182$" ]; then
+    if [[ "$ZKURL" =~ :2182$ ]]; then
       ZK_OPTIONS="$SSL_OPTIONS"
     else
       ZK_OPTIONS=""
     fi
-    java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
+    java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG 
     set +e
 fi
 
@@ -183,6 +198,10 @@ cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
 cp -f /conf/env.sh $ZOOCFGDIR
 
 if [ -f $DYNCONFIG ]; then
+  echo "DYNAMIC CONFIG = " # REMOVE
+  cat $DYNCONFIG # REMOVE
+  echo "STATIC CONFIG = " # REMOVE
+  cat $STATIC_CONFIG # REMOVE
   # Node registered, start server
   echo Starting zookeeper service
   zkServer.sh --config $ZOOCFGDIR start-foreground
