@@ -21,7 +21,6 @@ LOG4J_CONF=/conf/log4j-quiet.properties
 # use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
-CLIENT_PORT=${SEED_PORT:-$CLIENT_PORT}
 
 # used when zkid starts from value grater then 1, default 1
 OFFSET=${OFFSET:-1}

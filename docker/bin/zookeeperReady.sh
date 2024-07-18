@@ -26,8 +26,8 @@ OFFSET=${OFFSET:-1}
 # use SEED_NODE to bootstrap the current zookeeper cluster, else default to local cluster
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
-CLIENT_PORT=${SEED_PORT:-$CLIENT_PORT}
 
+echo "TESTING READINESS NOW"
 OK=$(echo ruok | socat stdio tcp:localhost:$CLIENT_PORT)
 
 # Check to see if zookeeper service answers
@@ -39,6 +39,7 @@ if [[ "$OK" == "imok" ]]; then
     echo "There is no active ensemble, skipping readiness probe..."
     exit 0
   else
+    echo "ACTIVE ENSEMBLE, TESTING READINESS"
     set -e
     # An ensemble exists, check to see if this node is already a member.
     # Check to see if zookeeper service for this node is a participant
@@ -88,12 +89,18 @@ if [[ "$OK" == "imok" ]]; then
       exit 0
     elif [[ "$ROLE" == "observer" ]]; then
       echo "Zookeeper service is ready to be upgraded from observer to participant."
-      ROLE=participant
+      SSL_OPTIONS="-Dzookeeper.clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty -Dzookeeper.client.secure=true"
       ZKURL=$(zkConnectionString)
+      ROLE=participant
       ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
-      java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar remove $ZKURL $MYID
+      if [[ "$ZKURL" =~ :2182$ ]]; then
+        ZK_OPTIONS="$SSL_OPTIONS"
+      else
+        ZK_OPTIONS=""
+      fi
+      java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar remove $ZKURL $MYID 
       sleep 1
-      java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG
+      java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG
       exit 0
     else
       echo "Something has gone wrong. Unable to determine zookeeper role."
