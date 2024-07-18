@@ -127,11 +127,9 @@ fi
 
 if [[ "$ACTIVE_ENSEMBLE" == false ]]; then
   # This is the first node being added to the cluster or headless service not yet available
-  echo "Active_Ensemble = $ACTIVE_ENSEMBLE, register_node false" #REMOVE
   REGISTER_NODE=false
 else
   # An ensemble exists, check to see if this node is already a member.
-  echo "ONDISK_MYID_CONFIG = $ONDISK_MYID_CONFIG, ONDISK_DYN_CONFIG = $ONDISK_DYN_CONFIG" #REMOVE
   if [[ "$ONDISK_MYID_CONFIG" == false || "$ONDISK_DYN_CONFIG" == false ]]; then
     REGISTER_NODE=true
   else

@@ -27,7 +27,6 @@ OFFSET=${OFFSET:-1}
 # CLIENT_HOST is used in zkConnectionString function already to create zkURL
 CLIENT_HOST=${SEED_NODE:-$CLIENT_HOST}
 
-echo "TESTING READINESS NOW"
 OK=$(echo ruok | socat stdio tcp:localhost:$CLIENT_PORT)
 
 # Check to see if zookeeper service answers
@@ -39,7 +38,6 @@ if [[ "$OK" == "imok" ]]; then
     echo "There is no active ensemble, skipping readiness probe..."
     exit 0
   else
-    echo "ACTIVE ENSEMBLE, TESTING READINESS"
     set -e
     # An ensemble exists, check to see if this node is already a member.
     # Check to see if zookeeper service for this node is a participant
