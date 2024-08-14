@@ -29,7 +29,12 @@ function zkConnectionString() {
     set -e
     echo "localhost:${CLIENT_PORT}"
   else
+    if [ -z "${SEED_PORT}" ]; then
+      PORT=${CLIENT_PORT}
+    else
+      PORT=${SEED_PORT}
+    fi
     set -e
-    echo "${CLIENT_HOST}:${CLIENT_PORT}"
+    echo "${CLIENT_HOST}:${PORT}"
   fi
 }

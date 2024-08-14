@@ -73,7 +73,7 @@ if [ -f $MYID_FILE ]; then
   fi
 fi
 
-if [ -f $DYNCONFIG ]; then
+if [ -f $DYNCONFIG ] && [ -z $SEED_NODE ]; then
   ONDISK_DYN_CONFIG=true
 fi
 
@@ -137,6 +137,7 @@ else
   fi
 fi
 
+
 if [[ "$WRITE_CONFIGURATION" == true ]]; then
   echo "Writing myid: $MYID to: $MYID_FILE."
   echo $MYID > $MYID_FILE
@@ -151,13 +152,20 @@ if [[ "$WRITE_CONFIGURATION" == true ]]; then
   fi
 fi
 
+
 if [[ "$REGISTER_NODE" == true ]]; then
     ROLE=observer
     ZKURL=$(zkConnectionString)
     ZKCONFIG=$(zkConfig $OUTSIDE_NAME)
     set -e
     echo Registering node and writing local configuration to disk.
-    java -Dlog4j.configuration=file:"$LOG4J_CONF" -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG
+    SSL_OPTIONS="-Dzookeeper.clientCnxnSocket=org.apache.zookeeper.ClientCnxnSocketNetty -Dzookeeper.client.secure=true"
+    if [[ "$ZKURL" =~ :2182$ ]]; then
+      ZK_OPTIONS="$SSL_OPTIONS"
+    else
+      ZK_OPTIONS=""
+    fi
+    java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG 
     set +e
 fi
 
