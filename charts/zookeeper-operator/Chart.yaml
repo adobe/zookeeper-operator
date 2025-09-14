@@ -6,5 +6,5 @@ appVersion: 0.2.15
 keywords:
 - zookeeper
 - storage
-home: https://github.com/pravega/zookeeper-operator
+home: https://github.com/adobe/zookeeper-operator
 icon: https://zookeeper.apache.org/images/zookeeper_small.gif
