@@ -1,0 +1,137 @@
+name: release-helm-charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+    tags:
+      - '*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chart-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract tag
+        id: vars
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${TAG////-}"
+          echo "Using tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set chart versions to tag
+        if: startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref, 'refs/tags/zk')
+        run: |
+          set -euo pipefail
+          for chart in charts/*; do
+            f="$chart/Chart.yaml"
+            if [ -f "$f" ]; then
+              echo "Updating version in $f to ${TAG:-${{ steps.vars.outputs.tag }}}"
+              # Replace the version field at start of line (optional leading spaces)
+              sed -i.bak -E "s|^[[:space:]]*version:[[:space:]]*.*$|version: ${{ steps.vars.outputs.tag }}|" "$f"
+              rm -f "$f.bak"
+            fi
+          done
+
+      - name: Sync zookeeper chart image.tag with Docker tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          ZK_VERSION=$(sed -n "s/^ARG DISTRO_NAME=apache-zookeeper-\([0-9.]*\)-bin$/\1/p" docker/zookeeper-image/Dockerfile | head -n1)
+          if [ -z "$ZK_VERSION" ]; then
+            # Fallback to current value in chart values
+            ZK_VERSION=$(sed -n "s/^[[:space:]]*tag:[[:space:]]*\([0-9.]*\).*/\1/p" charts/zookeeper/values.yaml | head -n1)
+          fi
+          TAG="${{ steps.vars.outputs.tag }}"
+          if [[ "$GITHUB_REF" == refs/tags/zk* ]]; then
+            NEW_IMG_TAG="${ZK_VERSION}-apache-${TAG}"
+          else
+            NEW_IMG_TAG="${ZK_VERSION}-${TAG}"
+          fi
+          echo "Setting charts/zookeeper/values.yaml image.tag to ${NEW_IMG_TAG}"
+          sed -i.bak -E "s|^([[:space:]]*tag:[[:space:]]*).*$|\1${NEW_IMG_TAG}|" charts/zookeeper/values.yaml
+          rm -f charts/zookeeper/values.yaml.bak
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Lint Helm charts
+        run: |
+          set -euo pipefail
+          found=0
+          for chart in charts/*; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              found=1
+              echo "Linting $chart"
+              helm lint "$chart"
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No charts found under charts/." >&2
+            exit 1
+          fi
+
+      - name: Build chart dependencies (if any)
+        run: |
+          set -euo pipefail
+          for chart in charts/*; do
+            if [ -f "$chart/Chart.yaml" ] && [ -f "$chart/Chart.yaml" ]; then
+              if [ -f "$chart/Chart.yaml" ] && grep -q "^dependencies:" "$chart/Chart.yaml"; then
+                echo "Updating dependencies for $chart"
+                helm dependency update "$chart"
+              fi
+            fi
+          done
+
+      - name: Ensure gh-pages branch exists
+        run: |
+          set -euo pipefail
+          if ! git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
+            echo "Initializing gh-pages branch for chart-releaser"
+            tmpdir=$(mktemp -d)
+            git worktree add "$tmpdir" HEAD
+            pushd "$tmpdir"
+              git checkout --orphan gh-pages
+              rm -rf ./*
+              touch .nojekyll
+              echo "" > index.yaml
+              git add .nojekyll index.yaml
+              git commit -m "Initialize gh-pages"
+              git push origin gh-pages
+            popd
+            git worktree remove "$tmpdir" --force
+          fi
+
+      - name: Release charts to GitHub Pages
+        if: ${{ !startsWith(github.ref, 'refs/tags/zk') }}
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          charts_dir: charts
+          packages_with_index: true
+          pages_branch: gh-pages
+          skip_existing: true
