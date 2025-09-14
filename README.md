@@ -46,7 +46,7 @@ The project is currently alpha. While no breaking API changes are currently plan
 
 ### Overview
 
-This operator runs a Zookeeper 3.8.3 cluster, and uses Zookeeper dynamic reconfiguration to handle node membership.
+This operator runs a Zookeeper 3.8.4 cluster, and uses Zookeeper dynamic reconfiguration to handle node membership.
 
 The operator itself is built with the [Operator framework](https://github.com/operator-framework/operator-sdk).
 
