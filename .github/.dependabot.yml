@@ -1,0 +1,66 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # GitHub Actions dependencies (grouped into single PR)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
+
+  # Tool versions tracking via Docker ecosystem (grouped into single PR)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
+
+
+  # =============================================================================
+  # GO MODULES CONFIGURATION WITH GROUPING
+  # =============================================================================
+  # Using groups to combine all Go module updates into fewer PRs.
+  # Note: Groups work within each package-ecosystem entry, so we separate:
+  # - Main modules (rot)
+  #
+  # Current go.mod files detected:
+  # - / (root)
+  # =============================================================================
+
+  # Main Go modules (grouped into single PR)
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      main-go-dependencies:
+        patterns:
+          - "*"

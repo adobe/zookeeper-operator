@@ -31,6 +31,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	"github.com/pravega/zookeeper-operator/controllers"
@@ -102,12 +103,21 @@ func main() {
 
 	// create uniq leaderElectionID per deployment. a deployment watches a uniq set of namespaces
 	leaderElectionID := fmt.Sprintf("%s-%s", "zookeeper-operator-lock", StringMd5Hash(namespaces))
+	cacheOpts := cache.Options{}
+	if len(managerNamespaces) > 0 {
+		defaultNamespaces := make(map[string]cache.Config, len(managerNamespaces))
+		for _, ns := range managerNamespaces {
+			defaultNamespaces[ns] = cache.Config{}
+		}
+		cacheOpts.DefaultNamespaces = defaultNamespaces
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		Cache:              cache.Options{Namespaces: managerNamespaces},
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   leaderElectionID,
+		Scheme:           scheme,
+		Cache:            cacheOpts,
+		Metrics:          server.Options{BindAddress: metricsAddr},
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: leaderElectionID,
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
