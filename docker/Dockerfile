@@ -15,9 +15,9 @@ COPY zu /zu
 WORKDIR /zu
 RUN ./gradlew shadowJar
 
-# use forked base zookeeper 3.8.3 docker image
+# use forked base zookeeper 3.8.4 docker image
 # that runs on openjdk-21
-FROM adobe/zookeeper:3.8.3-apache-zk-20240314
+FROM adobe/zookeeper:3.8.4-apache-zk-20250914
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=0 /zu/build/libs/zu.jar /opt/libs/
