@@ -389,7 +389,7 @@ The list of available commands are
 ### Build the operator image
 
 Requirements:
-  - Go 1.21+
+  - Go 1.25+
 
 Use the `make` command to build the Zookeeper operator image.
 

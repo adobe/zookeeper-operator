@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.25
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.25
+        id: go
+      - name: Set up Go for root
+        run: |
+          sudo ln -sf `which go` `sudo which go` || true
+          sudo go version
+      - uses: actions/checkout@v2
+      - name: get go version
+        run: go version
+      - name: Gofmt and License checks
+        run: make check
+      - name: unit tests
+        run: make test
+      - name: Build Docker image (no push)
+        env:
+          DOCKER_BUILDKIT: 1
+        run: |
+          docker build \
+            --build-arg VERSION=0.0.0-ci \
+            --build-arg GIT_SHA=${GITHUB_SHA::7} \
+            -t zookeeper-operator:ci .
