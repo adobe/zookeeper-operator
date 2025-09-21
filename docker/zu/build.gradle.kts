@@ -2,12 +2,17 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.5.31"
-    id("com.github.johnrengelman.shadow") version "7.1.0"
+    kotlin("jvm") version "1.9.21"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 repositories {
     mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 dependencies {
@@ -16,7 +21,7 @@ dependencies {
 }
 
 tasks.withType<ShadowJar>() {
-    classifier = null
+    archiveClassifier.set("")
     manifest {
         attributes["Main-Class"] = "io.pravega.zookeeper.MainKt"
     }
@@ -24,6 +29,6 @@ tasks.withType<ShadowJar>() {
 
 tasks.withType<KotlinCompile> {
   kotlinOptions {
-    jvmTarget = "11"
+    jvmTarget = "21"
   }
 }

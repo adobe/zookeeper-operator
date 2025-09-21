@@ -8,12 +8,12 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
-FROM gradle:jdk17
+FROM gradle:jdk21
 
 RUN mkdir /zu
 COPY zu /zu
 WORKDIR /zu
-RUN ./gradlew shadowJar
+RUN ./gradlew shadowJar --no-daemon
 
 # use forked base zookeeper 3.8.4 docker image
 # that runs on openjdk-21
