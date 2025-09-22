@@ -24,3 +24,12 @@ COPY --from=0 /zu/build/libs/zu.jar /opt/libs/
 
 RUN apt-get -q update && \
     apt-get install --no-install-recommends -y dnsutils curl procps socat
+
+# OCI standard labels
+LABEL org.opencontainers.image.title="Apache Zookeeper"
+LABEL org.opencontainers.image.description="Apache Zookeeper image build with java-21"
+LABEL org.opencontainers.image.source="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.vendor="Adobe"
+LABEL org.opencontainers.image.licenses="Apache-2.0"

@@ -158,6 +158,16 @@ EXPOSE 2181 2888 3888 8080
 ENV PATH=$PATH:/$DISTRO_NAME/bin \
     ZOOCFGDIR=$ZOO_CONF_DIR
 
+# OCI standard labels
+LABEL org.opencontainers.image.title="Apache Zookeeper"
+LABEL org.opencontainers.image.description="Apache Zookeeper 3.8.4 with OpenJDK 21"
+LABEL org.opencontainers.image.source="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.vendor="Adobe"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.version="3.8.4"
+
 COPY docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["zkServer.sh", "start-foreground"]
