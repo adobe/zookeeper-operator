@@ -22,11 +22,11 @@ import (
 const (
 	// DefaultZkContainerRepository is the default docker repo for the zookeeper
 	// container
-	DefaultZkContainerRepository = "pravega/zookeeper"
+	DefaultZkContainerRepository = "ghcr.io/adobe/zookeeper-operator/zookeeper"
 
 	// DefaultZkContainerVersion is the default tag used for for the zookeeper
 	// container
-	DefaultZkContainerVersion = "0.2.15"
+	DefaultZkContainerVersion = "3.8.4-0.2.15-adobe-20250923"
 
 	// DefaultZkContainerPolicy is the default container pull policy used
 	DefaultZkContainerPolicy = "Always"

@@ -8,3 +8,11 @@ keywords:
 - storage
 home: https://github.com/adobe/zookeeper-operator
 icon: https://zookeeper.apache.org/images/zookeeper_small.gif
+annotations:
+  org.opencontainers.image.title: "Zookeeper Operator Helm Chart"
+  org.opencontainers.image.description: "Zookeeper Operator Helm chart for Kubernetes"
+  org.opencontainers.image.source: "https://github.com/adobe/zookeeper-operator"
+  org.opencontainers.image.url: "https://github.com/adobe/zookeeper-operator"
+  org.opencontainers.image.documentation: "https://github.com/adobe/zookeeper-operator/tree/master/charts/zookeeper-operator"
+  org.opencontainers.image.vendor: "Adobe"
+  org.opencontainers.image.licenses: "Apache-2.0"

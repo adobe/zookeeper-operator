@@ -1,13 +1,14 @@
-# Zookeeper Operator
-[![Build Status](https://travis-ci.org/pravega/zookeeper-operator.svg?branch=master)](https://travis-ci.org/pravega/zookeeper-operator)
-### Project status: alpha
 
-The project is currently alpha. While no breaking API changes are currently planned, we reserve the right to address bugs and change the API before the project is declared stable.
+# Zookeeper Operator
+
+### Project status: beta
+
+The project is currently beta. While no breaking API changes are currently planned, we reserve the right to address bugs and change the API before the project is declared stable.
 
 ## Table of Contents
 
 - [Zookeeper Operator](#zookeeper-operator)
-    - [Project status: alpha](#project-status-alpha)
+    - [Project status: beta](#project-status-beta)
   - [Table of Contents](#table-of-contents)
     - [Overview](#overview)
   - [Requirements](#requirements)
@@ -16,16 +17,13 @@ The project is currently alpha. While no breaking API changes are currently plan
       - [Install via helm](#install-via-helm)
       - [Manual deployment](#manual-deployment)
     - [Deploy a sample Zookeeper cluster](#deploy-a-sample-zookeeper-cluster)
-      - [Install via helm](#install-via-helm-1)
       - [Manual deployment](#manual-deployment-1)
     - [Deploy a sample Zookeeper cluster with Ephemeral storage](#deploy-a-sample-zookeeper-cluster-with-ephemeral-storage)
     - [Deploy a sample Zookeeper cluster with Istio](#deploy-a-sample-zookeeper-cluster-with-istio)
     - [Upgrade a Zookeeper cluster](#upgrade-a-zookeeper-cluster)
-      - [Trigger the upgrade via helm](#trigger-the-upgrade-via-helm)
       - [Trigger the upgrade manually](#trigger-the-upgrade-manually)
     - [Upgrade the Operator](#upgrade-the-operator)
     - [Uninstall the Zookeeper cluster](#uninstall-the-zookeeper-cluster)
-      - [Uninstall via helm](#uninstall-via-helm)
       - [Manual uninstall](#manual-uninstall)
     - [Uninstall the operator](#uninstall-the-operator)
       - [Uninstall via helm](#uninstall-via-helm-1)
@@ -33,15 +31,11 @@ The project is currently alpha. While no breaking API changes are currently plan
     - [The AdminServer](#the-adminserver)
   - [Development](#development)
     - [Build the operator image](#build-the-operator-image)
+    - [Published Docker Images](#published-docker-images)
     - [Direct access to the cluster](#direct-access-to-the-cluster)
     - [Run the operator locally](#run-the-operator-locally)
     - [Installation on Google Kubernetes Engine](#installation-on-google-kubernetes-engine)
-    - [Installation on Minikube](#installation-on-minikube)
-      - [Minikube Setup](#minikube-setup)
-      - [Cluster Deployment](#cluster-deployment)
-      - [Zookeeper YAML  Exporter](#zookeeper-yaml--exporter)
-        - [How to build Zookeeper Operator](#how-to-build-zookeeper-operator)
-        - [How to use exporter](#how-to-use-exporter)
+    - [How to build Zookeeper Operator](#how-to-build-zookeeper-operator)
 
 
 ### Overview
@@ -56,11 +50,7 @@ The operator itself is built with the [Operator framework](https://github.com/op
 
 ## Usage
 
-We recommend using our [helm charts](charts) for all installation and upgrades. Since version 0.2.8 onwards, the helm charts for zookeeper operator and zookeeper cluster are published in [https://charts.pravega.io](https://charts.pravega.io/). To add this repository to your Helm repos, use the following command
-```
-helm repo add pravega https://charts.pravega.io
-```
-However there are manual deployment and upgrade options available as well.
+We recommend using our [helm charts](charts) for all installation and upgrades. The helm chart for zookeeper operator is published to GitHub Container Registry (GHCR).
 
 ### Install the operator
 
@@ -68,7 +58,24 @@ However there are manual deployment and upgrade options available as well.
 
 #### Install via helm
 
-To understand how to deploy the zookeeper operator using helm, refer to [this](charts/zookeeper-operator#installing-the-chart).
+To install the zookeeper operator using helm:
+
+> **Note:** You can view all available versions at [https://github.com/adobe/zookeeper-operator/pkgs/container/zookeeper-operator%2Fzookeeper-operator](https://github.com/adobe/zookeeper-operator/pkgs/container/zookeeper-operator%2Fzookeeper-operator)
+
+
+```bash
+# Install the CRDs
+kubectl create -f https://raw.githubusercontent.com/adobe/zookeeper-operator/master/config/crd/bases/zookeeper.pravega.io_zookeeperclusters.yaml
+
+
+# Install latest version
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator
+
+# Or install a specific version
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --version [VERSION]
+```
+
+For more detailed configuration options, refer to [this](charts/zookeeper-operator#installing-the-chart).
 
 #### Manual deployment
 
@@ -105,10 +112,6 @@ zookeeper-operator   1         1         1            1           12m
 ```
 
 ### Deploy a sample Zookeeper cluster
-
-#### Install via helm
-
-To understand how to deploy a sample zookeeper cluster using helm, refer to [this](charts/zookeeper#installing-the-chart).
 
 #### Manual deployment
 
@@ -165,9 +168,6 @@ NAME                     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)      
 svc/zookeeper-client     ClusterIP   10.31.243.173   <none>        2181/TCP            2m
 svc/zookeeper-headless   ClusterIP   None            <none>        2888/TCP,3888/TCP   2m
 ```
-
-> Note: If you want to configure zookeeper pod, for example to change the service account or the CPU limits, you can set the following properties: [~/charts/zookeeper/templates/zookeeper.yaml](https://github.com/pravega/zookeeper-operator/blob/master/charts/zookeeper/templates/zookeeper.yaml).
-> Service account configuration is available from zookeeper operator version `0.2.9` onwards.
 
 ```
 apiVersion: "zookeeper.pravega.io/v1beta1"
@@ -241,10 +241,6 @@ $ kubectl create -f zk-with-istio.yaml
 
 ### Upgrade a Zookeeper cluster
 
-#### Trigger the upgrade via helm
-
-To understand how to upgrade the zookeeper cluster using helm, refer to [this](charts/zookeeper#upgrading-the-chart).
-
 #### Trigger the upgrade manually
 
 To initiate an upgrade process manually, a user has to update the `spec.image.tag` field of the `ZookeeperCluster` custom resource. This can be done in three different ways using the `kubectl` command.
@@ -310,9 +306,6 @@ For upgrading the zookeeper operator check the document [operator-upgrade](doc/o
 
 ### Uninstall the Zookeeper cluster
 
-#### Uninstall via helm
-
-Refer to [this](charts/zookeeper#uninstalling-the-chart).
 
 #### Manual uninstall
 
@@ -404,20 +397,40 @@ Example image after running `make build`.
 The Zookeeper operator image will be available in your Docker environment.
 
 ```
-$ docker images pravega/zookeeper-operator
+$ docker images adobe/zookeeper-operator
 
 REPOSITORY                    TAG              IMAGE ID        CREATED         SIZE   
 
-pravega/zookeeper-operator    0.1.1-3-dirty    2b2d5bcbedf5    10 minutes ago  41.7MB
+adobe/zookeeper-operator      0.2.15-3-dirty   2b2d5bcbedf5    10 minutes ago  41.7MB
 
-pravega/zookeeper-operator    latest           2b2d5bcbedf5    10 minutes ago  41.7MB
-
-```
-Optionally push it to a Docker registry.
+adobe/zookeeper-operator      latest           2b2d5bcbedf5    10 minutes ago  41.7MB
 
 ```
-docker tag pravega/zookeeper-operator [REGISTRY_HOST]:[REGISTRY_PORT]/pravega/zookeeper-operator
-docker push [REGISTRY_HOST]:[REGISTRY_PORT]/pravega/zookeeper-operator
+
+## Published Docker Images
+
+The official Docker images are published to both:
+
+- **GitHub Container Registry (GHCR)**: `ghcr.io/adobe/zookeeper-operator`
+- **Docker Hub**: `adobe/zookeeper-operator`
+- **ZooKeeper images**: 
+  - GHCR: `ghcr.io/adobe/zookeeper-operator/zookeeper`
+  - Docker Hub: `adobe/zookeeper`
+
+To pull the latest operator image:
+```bash
+# From GHCR (recommended)
+docker pull ghcr.io/adobe/zookeeper-operator:latest
+
+# From Docker Hub  
+docker pull adobe/zookeeper-operator:latest
+```
+
+Optionally push your local build to a Docker registry:
+
+```
+docker tag adobe/zookeeper-operator [REGISTRY_HOST]:[REGISTRY_PORT]/adobe/zookeeper-operator
+docker push [REGISTRY_HOST]:[REGISTRY_PORT]/adobe/zookeeper-operator
 ```
 
 where:
@@ -459,40 +472,6 @@ On GKE, the following command must be run before installing the operator, replac
 
 ```
 $ kubectl create clusterrolebinding your-user-cluster-admin-binding --clusterrole=cluster-admin --user=your.google.cloud.email@example.org
-```
-
-### Installation on Minikube
-
-#### Minikube Setup
-To setup minikube locally you can follow the steps mentioned [here](https://github.com/pravega/pravega/wiki/Kubernetes-Based-System-Test-Framework#minikube-setup).
-
-Once minikube setup is complete, `minikube start` will create a minikube VM.
-
-#### Cluster Deployment
-First install the zookeeper operator in either of the ways mentioned [here](#install-the-operator).
-Since minikube provides a single node Kubernetes cluster which has a low resource provisioning, we provide a simple way to install a small zookeeper cluster on a minikube environment using the following command.
-
-```
-helm install zookeeper charts/zookeeper --values charts/zookeeper/values/minikube.yaml
-```
-
-#### Zookeeper YAML  Exporter
-
-Zookeeper Exporter is a binary which is used to generate YAML file for all the secondary resources which Zookeeper Operator deploys to the Kubernetes Cluster. It takes ZookeeperCluster resource YAML file as input and generates bunch of secondary resources YAML files. The generated output look like the following:
-
-```
->tree  ZookeeperCluster/
-ZookeeperCluster/
-├── client
-│   └── Service.yaml
-├── config
-│   └── ConfigMap.yaml
-├── headless
-│   └── Service.yaml
-├── pdb
-│   └── PodDisruptionBudget.yaml
-└── zk
-    └── StatefulSet.yaml
 ```
 
 ##### How to build Zookeeper Operator

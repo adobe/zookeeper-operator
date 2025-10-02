@@ -8,8 +8,8 @@ global:
   # - private-registry-key
 
 image:
-  repository: pravega/zookeeper-operator
   tag: 0.2.15
+  repository: ghcr.io/adobe/zookeeper-operator
   pullPolicy: IfNotPresent
 
 securityContext: {}

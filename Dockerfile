@@ -4,7 +4,7 @@ ARG ALPINE_VERSION=3.22
 FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.25-alpine${ALPINE_VERSION} AS go-builder
 
 ARG PROJECT_NAME=zookeeper-operator
-ARG REPO_PATH=github.com/pravega/$PROJECT_NAME
+ARG REPO_PATH=github.com/adobe/$PROJECT_NAME
 
 # Build version and commit should be passed in when performing docker build
 ARG VERSION=0.0.0-localdev
@@ -31,8 +31,24 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o /src/${PROJECT_NAME} \
 
 FROM ${DISTROLESS_DOCKER_REGISTRY:-gcr.io/}distroless/static-debian11:nonroot AS final
 
+# Re-declare ARG variables for the final stage
 ARG PROJECT_NAME=zookeeper-operator
+ARG VERSION=0.0.0-localdev
+ARG GIT_SHA=0000000
+ARG BUILT_AT
 
 COPY --from=go-builder /src/${PROJECT_NAME} /usr/local/bin/${PROJECT_NAME}
+
+# OCI standard labels
+LABEL org.opencontainers.image.title="Zookeeper Operator"
+LABEL org.opencontainers.image.description="Zookeeper Operator for Kubernetes"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+LABEL org.opencontainers.image.created="${BUILT_AT}"
+LABEL org.opencontainers.image.source="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"
+LABEL org.opencontainers.image.vendor="Adobe"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 ENTRYPOINT ["/usr/local/bin/zookeeper-operator"]
