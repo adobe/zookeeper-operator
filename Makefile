@@ -7,8 +7,8 @@
 # http://www.apache.org/licenses/LICENSE-2.0
 
 SHELL=/bin/bash -o pipefail
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd"
+# Produce CRDs compatible with Kubernetes 1.16+ (using apiextensions.k8s.io/v1)
+CRD_OPTIONS ?= "crd:crdVersions=v1,generateEmbeddedObjectMeta=true"
 
 PROJECT_NAME=zookeeper-operator
 EXPORTER_NAME=zookeeper-exporter
@@ -42,8 +42,11 @@ uninstall: manifests kustomize
 
 crds: ## Generate CRDs
 	- make controller-gen
-	- $(CONTROLLER_GEN) crd paths=./api/... output:dir=./config/crd/bases schemapatch:manifests=./config/crd/bases
+	- $(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./..." output:crd:artifacts:config=config/crd/bases
 
+# Generate manifests e.g. CRD, RBAC etc.
+manifests: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests kustomize
@@ -64,10 +67,6 @@ undeploy-test: manifests kustomize
 # Undeploy controller in the configured Kubernetes cluster in ~/.kube/config
 undeploy:
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
-
-# Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 # Run go fmt against code
 fmt:
