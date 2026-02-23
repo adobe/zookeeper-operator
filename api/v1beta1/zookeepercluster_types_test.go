@@ -79,7 +79,8 @@ var _ = Describe("ZookeeperCluster Types", func() {
 			})
 
 			It("Checking tostring() function", func() {
-				Ω(z.Spec.Image.ToString()).To(Equal("pravega/zookeeper:0.2.15"))
+				expected := fmt.Sprintf("%s:%s", v1beta1.DefaultZkContainerRepository, v1beta1.DefaultZkContainerVersion)
+				Ω(z.Spec.Image.ToString()).To(Equal(expected))
 			})
 
 		})
