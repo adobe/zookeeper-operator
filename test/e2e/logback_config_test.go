@@ -21,10 +21,10 @@ import (
 )
 
 // E2E test for Logback config: script copies operator-generated logback files to
-// the runtime config dir, and ZooKeeper uses them so logs are at INFO (not DEBUG).
+// the runtime config dir, and the desired log level (INFO by default) is applied.
 var _ = Describe("Logback config", func() {
-	Context("Script copies Logback files and ZooKeeper logs at INFO", func() {
-		It("should have logback.xml and logback-quiet.xml in runtime config dir and log at INFO", func() {
+	Context("Script copies Logback files and desired log level is applied", func() {
+		It("should have logback files in runtime config dir and no DEBUG from ZooKeeper/Jetty when INFO is desired", func() {
 			By("creating Zookeeper cluster")
 			cluster := zk_e2eutil.NewDefaultCluster(testNamespace)
 			cluster.WithDefaults()
@@ -57,19 +57,19 @@ var _ = Describe("Logback config", func() {
 			Expect(stdout).To(ContainSubstring("logback.xml"), "runtime config dir should contain logback.xml")
 			Expect(stdout).To(ContainSubstring("logback-quiet.xml"), "runtime config dir should contain logback-quiet.xml")
 
-			By("verifying ZooKeeper logs at INFO level (Logback discovers operator config)")
+			By("verifying desired log level is applied (no DEBUG from ZooKeeper/Jetty when we expect INFO)")
 			logs, err := zk_e2eutil.GetPodLogs(ctx, cfg, zk.Namespace, pod.Name, "zookeeper", &corev1.PodLogOptions{TailLines: intPtr(200)})
 			Expect(err).NotTo(HaveOccurred())
-			// Expect at least one INFO line from ZooKeeper packages to confirm INFO level is in use
+			// The main regression: when operator config asks for INFO, we must not see DEBUG from these packages.
+			// If DEBUG appears, Logback config was not discovered or not applied.
 			lines := strings.Split(logs, "\n")
-			var hasZkInfo bool
+			var debugLines []string
 			for _, line := range lines {
-				if strings.Contains(line, " INFO ") && (strings.Contains(line, "org.apache.zookeeper") || strings.Contains(line, "org.eclipse.jetty")) {
-					hasZkInfo = true
-					break
+				if strings.Contains(line, " DEBUG ") && (strings.Contains(line, "org.apache.zookeeper") || strings.Contains(line, "org.eclipse.jetty")) {
+					debugLines = append(debugLines, strings.TrimSpace(line))
 				}
 			}
-			Expect(hasZkInfo).To(BeTrue(), "recent logs should contain INFO from org.apache.zookeeper or org.eclipse.jetty; logs (excerpt): %s", truncate(logs, 1500))
+			Expect(debugLines).To(BeEmpty(), "desired level is INFO but found DEBUG from ZooKeeper/Jetty (config not applied): %v; logs (excerpt): %s", debugLines, truncate(logs, 1500))
 
 			By("deleting Zookeeper cluster")
 			Expect(k8sClient.Delete(ctx, zk)).Should(Succeed())

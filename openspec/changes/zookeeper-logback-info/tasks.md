@@ -18,4 +18,4 @@
 ## 5. E2E test
 
 - [x] 5.1 Add e2eutil helpers in `pkg/test/e2e/e2eutil/pod_util.go`: `GetPodLogs` (stream pod logs with optional `PodLogOptions`) and `PodExec` (run a command in a pod container and return stdout/stderr)
-- [x] 5.2 Add e2e test in `test/e2e/logback_config_test.go` that creates a Zookeeper cluster, waits for ready, then (a) execs `ls /data/conf` in a running pod and asserts output contains `logback.xml` and `logback-quiet.xml`, and (b) fetches recent pod logs and asserts at least one INFO line from `org.apache.zookeeper` or `org.eclipse.jetty`, then deletes the cluster
+- [x] 5.2 Add e2e test in `test/e2e/logback_config_test.go` that creates a Zookeeper cluster, waits for ready, then (a) execs `ls /data/conf` in a running pod and asserts output contains `logback.xml` and `logback-quiet.xml`, and (b) fetches recent pod logs and asserts no DEBUG lines from `org.apache.zookeeper` or `org.eclipse.jetty` (so desired level INFO is applied), then deletes the cluster
