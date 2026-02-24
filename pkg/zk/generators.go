@@ -229,6 +229,8 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 			"zoo.cfg":                makeZkConfigString(z),
 			"log4j.properties":       makeZkLog4JConfigString(),
 			"log4j-quiet.properties": makeZkLog4JQuietConfigString(),
+			"logback.xml":            makeZkLogbackConfigString(),
+			"logback-quiet.xml":      makeZkLogbackQuietConfigString(),
 			"env.sh":                 makeZkEnvConfigString(z),
 		},
 	}
@@ -298,6 +300,49 @@ func makeZkLog4JConfigString() string {
 		"log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}\n" +
 		"log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout\n" +
 		"log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n\n"
+}
+
+// makeZkLogbackConfigString returns logback.xml with root and key loggers at INFO
+// so that ZooKeeper (which uses Logback at runtime) does not emit DEBUG.
+func makeZkLogbackConfigString() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+  </appender>
+  <logger name="org.apache.zookeeper" level="INFO"/>
+  <logger name="org.eclipse.jetty" level="INFO"/>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>
+`
+}
+
+// makeZkLogbackQuietConfigString returns logback-quiet.xml with root and key loggers at ERROR.
+func makeZkLogbackQuietConfigString() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>ERROR</level>
+    </filter>
+  </appender>
+  <logger name="org.apache.zookeeper" level="ERROR"/>
+  <logger name="org.eclipse.jetty" level="ERROR"/>
+  <root level="ERROR">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>
+`
 }
 
 func makeZkEnvConfigString(z *v1beta1.ZookeeperCluster) string {

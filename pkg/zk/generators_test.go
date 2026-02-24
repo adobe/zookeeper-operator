@@ -144,6 +144,27 @@ var _ = Describe("Generators Spec", func() {
 				})
 
 			})
+
+			Context("Logback config", func() {
+				It("should contain logback.xml and logback-quiet.xml in ConfigMap Data", func() {
+					Ω(cm.Data).To(HaveKey("logback.xml"))
+					Ω(cm.Data).To(HaveKey("logback-quiet.xml"))
+				})
+
+				It("should have logback.xml with root and loggers at INFO", func() {
+					cfg := cm.Data["logback.xml"]
+					Ω(cfg).To(ContainSubstring("<root level=\"INFO\">"))
+					Ω(cfg).To(ContainSubstring("<logger name=\"org.apache.zookeeper\" level=\"INFO\"/>"))
+					Ω(cfg).To(ContainSubstring("<logger name=\"org.eclipse.jetty\" level=\"INFO\"/>"))
+				})
+
+				It("should have logback-quiet.xml with root and loggers at ERROR", func() {
+					cfg := cm.Data["logback-quiet.xml"]
+					Ω(cfg).To(ContainSubstring("<root level=\"ERROR\">"))
+					Ω(cfg).To(ContainSubstring("<logger name=\"org.apache.zookeeper\" level=\"ERROR\"/>"))
+					Ω(cfg).To(ContainSubstring("<logger name=\"org.eclipse.jetty\" level=\"ERROR\"/>"))
+				})
+			})
 		})
 		Context("with overridden kubernetes cluster domain", func() {
 			var cfg string
