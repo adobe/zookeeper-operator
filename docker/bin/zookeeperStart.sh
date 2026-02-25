@@ -181,6 +181,8 @@ else
 fi
 cp -f /conf/log4j.properties $ZOOCFGDIR
 cp -f /conf/log4j-quiet.properties $ZOOCFGDIR
+cp -f /conf/logback.xml $ZOOCFGDIR
+cp -f /conf/logback-quiet.xml $ZOOCFGDIR
 cp -f /conf/env.sh $ZOOCFGDIR
 
 if [ -f $DYNCONFIG ]; then
