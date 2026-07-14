@@ -117,6 +117,12 @@ build-go:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(EXPORTER_NAME)-linux-amd64 cmd/exporter/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-o bin/$(PROJECT_NAME)-linux-arm64 main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-o bin/$(EXPORTER_NAME)-linux-arm64 cmd/exporter/main.go
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
 		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(PROJECT_NAME)-darwin-amd64 main.go
@@ -143,13 +149,11 @@ build-image:
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- docker buildx create --name zookeeper-builder
 	docker buildx use zookeeper-builder
-	docker buildx build --push --platform=$(PLATFORMS) --tag $(IMG) -f Dockerfile.cross .
+	docker buildx build --push --platform=$(PLATFORMS) --tag $(IMG) \
+		--build-arg VERSION=$(VERSION) --build-arg GIT_SHA=$(GIT_SHA) -f Dockerfile .
 	- docker buildx rm zookeeper-builder
-	rm Dockerfile.cross
 
 build-zk-image:
 
