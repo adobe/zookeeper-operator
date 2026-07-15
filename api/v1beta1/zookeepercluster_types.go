@@ -42,7 +42,7 @@ const (
 
 	// DefaultReadinessProbeInitialDelaySeconds is the default initial delay (in seconds)
 	// for the readiness probe
-	DefaultReadinessProbeInitialDelaySeconds = 10
+	DefaultReadinessProbeInitialDelaySeconds = 60
 
 	// DefaultReadinessProbePeriodSeconds is the default probe period (in seconds)
 	// for the readiness probe
@@ -62,7 +62,7 @@ const (
 
 	// DefaultLivenessProbeInitialDelaySeconds is the default initial delay (in seconds)
 	// for the liveness probe
-	DefaultLivenessProbeInitialDelaySeconds = 10
+	DefaultLivenessProbeInitialDelaySeconds = 60
 
 	// DefaultLivenessProbePeriodSeconds is the default probe period (in seconds)
 	// for the liveness probe
