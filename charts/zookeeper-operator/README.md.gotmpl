@@ -43,29 +43,4 @@ The command removes all the Kubernetes components associated with the chart and 
 
 The following table lists the configurable parameters of the zookeeper-operator chart and their default values.
 
-## Values
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| additionalEnv | list | `[]` | Additional Environment Variables |
-| additionalSidecars | list | `[]` | Additional Sidecars Configuration |
-| additionalVolumes | list | `[]` | Additional volumes required for sidecars |
-| affinity | object | `{}` | Operator pod affinity can be set |
-| annotations | object | `{}` | Pod annotations |
-| crd.create | bool | `true` | Create zookeeper CRD |
-| disableFinalizer | bool | `false` | Disable finalizer for zookeeper clusters, PVCs clean-up will be skipped |
-| global.imagePullSecrets | list | `[]` | Lists the secrets you need to use to pull zookeeper-operator image from a private registry. |
-| image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
-| image.repository | string | `"ghcr.io/adobe/zookeeper-operator"` | Image repository |
-| image.tag | string | `"0.2.15"` | Image tag |
-| labels | object | `{}` | Additional labels to be added to resources |
-| metricsBindAddress | string | `"127.0.0.1"` |  |
-| metricsPort | string | `"6000"` |  |
-| nodeSelector | object | `{}` | Operator pod node selector can be set |
-| rbac.create | bool | `true` | Install RBAC roles and bindings. |
-| resources | object | `{}` | Specifies resource requirements for the container |
-| securityContext | object | `{}` |  |
-| serviceAccount.create | bool | `true` | Create service account |
-| serviceAccount.name | string | `"zookeeper-operator"` | Name for the service account |
-| tolerations | list | `[]` | Operator pod tolerations can be set |
-| watchNamespace | string | `""` | List of namespaces where Operator watches for custom resources. |
+{{ template "chart.valuesSection" . }}
