@@ -20,7 +20,14 @@ jobs:
         run: |
           sudo ln -sf `which go` `sudo which go` || true
           sudo go version
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: Check values schema json
+        uses: losisin/helm-values-schema-json-action@v3
+        with:
+          values: values.yaml
+          working-directory: charts/zookeeper-operator
+          fail-on-diff: true
       - name: get go version
         run: go version
       - name: Gofmt and License checks

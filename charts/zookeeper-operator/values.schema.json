@@ -1,0 +1,97 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "additionalEnv": {
+            "type": "array"
+        },
+        "additionalSidecars": {
+            "type": "array"
+        },
+        "additionalVolumes": {
+            "type": "array"
+        },
+        "affinity": {
+            "type": "object"
+        },
+        "annotations": {
+            "type": "object"
+        },
+        "crd": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "disableFinalizer": {
+            "type": "boolean"
+        },
+        "global": {
+            "type": "object",
+            "properties": {
+                "imagePullSecrets": {
+                    "type": "array"
+                }
+            }
+        },
+        "image": {
+            "type": "object",
+            "properties": {
+                "pullPolicy": {
+                    "type": "string"
+                },
+                "repository": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "labels": {
+            "type": "object"
+        },
+        "metricsBindAddress": {
+            "type": "string"
+        },
+        "metricsPort": {
+            "type": "string"
+        },
+        "nodeSelector": {
+            "type": "object"
+        },
+        "rbac": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "resources": {
+            "type": "object"
+        },
+        "securityContext": {
+            "type": "object"
+        },
+        "serviceAccount": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "tolerations": {
+            "type": "array"
+        },
+        "watchNamespace": {
+            "type": "string"
+        }
+    }
+}

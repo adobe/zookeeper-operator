@@ -3,43 +3,49 @@
 ## Declare variables to be passed into your templates.
 
 global:
-  # Lists the secrets you need to use to pull zookeeper-operator image from a private registry.
+  # -- Lists the secrets you need to use to pull zookeeper-operator image from a private registry.
   imagePullSecrets: []
   # - private-registry-key
 
 image:
+  # -- Image tag
   tag: 0.2.15
+  # -- Image repository
   repository: ghcr.io/adobe/zookeeper-operator
+  # -- Image pull policy
   pullPolicy: IfNotPresent
 
 securityContext: {}
 #  runAsUser: 1001
 #  runAsGroup: 1001
 
-## Additional labels to be added to resources
+# -- Additional labels to be added to resources
 labels: {}
 
-## Install RBAC roles and bindings.
 rbac:
+  # -- Install RBAC roles and bindings.
   create: true
 
-## Service account name and whether to create it.
+
 serviceAccount:
+  # -- Create service account
   create: true
+  # -- Name for the service account
   name: zookeeper-operator
   ## Optionally specify an array of imagePullSecrets. Will override the global parameter if set
   # imagePullSecrets:
 
-## Whether to create the CRD.
 crd:
+  # -- Create zookeeper CRD
   create: true
 
 ## Specifies which namespace(s) the Operator should watch over.
 ## Default: An empty string means all namespaces.
 ## Multiple namespaces can be configured using a comma separated list of namespaces
+# -- List of namespaces where Operator watches for custom resources.
 watchNamespace: ""
 
-## Operator pod resources
+# -- Specifies resource requirements for the container
 resources: {}
   # limits:
   #   cpu: 2
@@ -48,29 +54,34 @@ resources: {}
   #   cpu: 1
   #   memory: 128Mi
 
-# Scheduling constraints
+# -- Operator pod node selector can be set
 nodeSelector: {}
-affinity: {}
+
+# -- Operator pod tolerations can be set
 tolerations: []
 
-# Pod annotations
+# -- Operator pod affinity can be set
+affinity: {}
+
+# -- Pod annotations
 annotations: {}
 
-## Additional Sidecars Configuration.
-additionalSidecars: {}
+# -- Additional Sidecars Configuration
+additionalSidecars: []
 # - name: nginx
 #   image: nginx:latest
 
-## Additional Environment Variables.
-additionalEnv: {}
+# -- Additional Environment Variables
+additionalEnv: []
 
-## Additional volumes required for sidecars.
-additionalVolumes: {}
+# -- Additional volumes required for sidecars
+additionalVolumes: []
 # - name: volume1
 #   emptyDir: {}
 # - name: volume2
 #   emptyDir: {}
 
+# -- Disable finalizer for zookeeper clusters, PVCs clean-up will be skipped
 disableFinalizer: false
 
 ## In order to enable gathering metrics by Prometheus etc... bind to 0.0.0.0

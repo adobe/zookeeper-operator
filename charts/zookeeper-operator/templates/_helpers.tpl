@@ -43,12 +43,16 @@ helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
 Default sidecar template
 */}}
 {{- define "chart.additionalSidecars"}}
-{{ toYaml .Values.additionalSidecars }}
-{{- end}}
+{{ with .Values.additionalSidecars }}
+    {{- toYaml . -}}
+{{- end }}
+{{- end }}
 
 {{/*
 Default volume template
 */}}
 {{- define "chart.additionalVolumes"}}
-{{ toYaml .Values.additionalVolumes }}
+{{ with .Values.additionalVolumes }}
+    {{- toYaml . -}}
+{{- end }}
 {{- end}}
