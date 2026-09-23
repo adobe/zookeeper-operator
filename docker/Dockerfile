@@ -8,19 +8,23 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
-FROM gradle:jdk21
+# zu.jar is architecture-independent bytecode, so build it once on the native
+# build platform instead of re-running Gradle under emulation for every target.
+FROM --platform=$BUILDPLATFORM gradle:jdk21 AS zu-builder
 
 RUN mkdir /zu
 COPY zu /zu
 WORKDIR /zu
 RUN ./gradlew shadowJar --no-daemon
 
-# use forked base zookeeper 3.8.4 docker image
-# that runs on openjdk-21
+# use forked base zookeeper docker image that runs on openjdk-21.
+# The tag is produced by the build-zookeeper-apache release job from
+# docker/zookeeper-image/Dockerfile, and release.yml asserts that it matches
+# the ARG ZK_VERSION declared there.
 FROM adobe/zookeeper:3.8.4-apache-zk-20250914
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
-COPY --from=0 /zu/build/libs/zu.jar /opt/libs/
+COPY --from=zu-builder /zu/build/libs/zu.jar /opt/libs/
 
 RUN apt-get -q update && \
     apt-get install --no-install-recommends -y dnsutils curl procps socat
