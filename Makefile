@@ -20,6 +20,13 @@ ALTREPO=emccorp/$(PROJECT_NAME)
 APP_ALTREPO=emccorp/$(APP_NAME)
 VERSION=$(shell git describe --always --tags --dirty | tr -d "v" | sed "s/\(.*\)-g`git rev-parse --short HEAD`/\1/")
 GIT_SHA=$(shell git rev-parse --short HEAD)
+# Single source of truth for the operator's builder image Go version: read the
+# `go` directive from go.mod so it never drifts from what the module requires.
+# Single source of truth for the operator's builder image Go version: read the
+# `go` directive from go.mod so it never drifts from what the module requires.
+# Trimmed to major.minor since Docker Hub's golang image only ships
+# X.Y-alpineN (floating patch) tags, not go.mod's full X.Y.Z patch version.
+GO_VERSION=$(shell awk '/^go /{print $$2}' go.mod | cut -d. -f1,2)
 TEST_IMAGE=$(TEST_REPO)-testimages:$(VERSION)
 DOCKER_TEST_PASS=testzkop@123
 DOCKER_TEST_USER=testzkop
@@ -131,7 +138,7 @@ build-go:
 		-o bin/$(EXPORTER_NAME)-windows-amd64.exe cmd/exporter/main.go
 
 build-image:
-	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_SHA=$(GIT_SHA) -t $(REPO):$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_SHA=$(GIT_SHA) --build-arg GO_VERSION=$(GO_VERSION) -t $(REPO):$(VERSION) .
 	docker tag $(REPO):$(VERSION) $(REPO):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
@@ -146,7 +153,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	# The Dockerfile cross-compiles natively using BUILDPLATFORM + TARGETOS/TARGETARCH, so it is built directly.
 	- docker buildx create --name zookeeper-builder
 	docker buildx use zookeeper-builder
-	docker buildx build --push --platform=$(PLATFORMS) --tag $(IMG) .
+	docker buildx build --push --platform=$(PLATFORMS) --build-arg GO_VERSION=$(GO_VERSION) --tag $(IMG) .
 	- docker buildx rm zookeeper-builder
 
 build-zk-image:

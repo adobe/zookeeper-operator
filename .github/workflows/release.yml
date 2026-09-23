@@ -55,10 +55,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Set up Go 1.25
+      - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: 1.25
+          go-version-file: go.mod
         id: go
       - name: Set up Go for root
         run: |
@@ -182,6 +182,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+      - name: Extract Go version from go.mod
+        id: govars
+        run: echo "go_version=$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
@@ -217,6 +220,7 @@ jobs:
             VERSION=${{ fromJSON(steps.meta-operator.outputs.json).labels['org.opencontainers.image.version'] }}
             BUILT_AT=${{ needs.prepare.outputs.built_at }}
             GIT_SHA=${{ github.sha }}
+            GO_VERSION=${{ steps.govars.outputs.go_version }}
           tags: ${{ steps.meta-operator.outputs.tags }}
           labels: ${{ steps.meta-operator.outputs.labels }}
           annotations: ${{ steps.meta-operator.outputs.annotations }}

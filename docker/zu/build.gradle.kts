@@ -1,8 +1,9 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.4.20"
+    kotlin("jvm") version "2.4.10"
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
@@ -28,7 +29,7 @@ tasks.withType<ShadowJar>() {
 }
 
 tasks.withType<KotlinCompile> {
-  kotlinOptions {
-    jvmTarget = "21"
+  compilerOptions {
+    jvmTarget.set(JvmTarget.JVM_21)
   }
 }
