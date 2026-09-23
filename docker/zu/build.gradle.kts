@@ -18,7 +18,7 @@ java {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("org.apache.zookeeper:zookeeper:3.9.3")
+    implementation("org.apache.zookeeper:zookeeper:3.9.6")
 }
 
 tasks.withType<ShadowJar>() {
