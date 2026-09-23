@@ -40,7 +40,7 @@ The project is currently beta. While no breaking API changes are currently plann
 
 ### Overview
 
-This operator runs a Zookeeper 3.9.3 cluster, and uses Zookeeper dynamic reconfiguration to handle node membership.
+This operator runs an Apache ZooKeeper 3.8.7 cluster, and uses Zookeeper dynamic reconfiguration to handle node membership.
 
 The operator itself is built with the [Operator framework](https://github.com/operator-framework/operator-sdk).
 

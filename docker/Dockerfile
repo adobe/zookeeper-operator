@@ -21,6 +21,11 @@ RUN ./gradlew shadowJar --no-daemon
 # The tag is produced by the build-zookeeper-apache release job from
 # docker/zookeeper-image/Dockerfile, and release.yml asserts that it matches
 # the ARG ZK_VERSION declared there.
+#
+# Keep this pinned to the floating "<zk version>-apache" tag rather than the
+# dated "<zk version>-apache-<git tag>" one: Dependabot only offers a Docker tag
+# update when the tag suffix is unchanged, so the stable suffix is what lets it
+# raise the bump automatically once a new ZooKeeper image has been released.
 FROM adobe/zookeeper:3.8.4-apache-zk-20250914
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
