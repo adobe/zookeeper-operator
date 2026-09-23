@@ -1,0 +1,83 @@
+# End-to-end tests against a kind cluster. The operator is built from this
+# commit, pushed to a kind-local registry and deployed in-cluster: running it
+# in the test process (RUN_LOCAL=true) cannot work, because the reconciler
+# connects to ZooKeeper through cluster DNS (*.svc.cluster.local), which does
+# not resolve on the runner. The suite takes a long time, so it runs on
+# demand, weekly, and on pull requests labelled "e2e".
+name: e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Create kind cluster with a local registry
+        id: kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: zookeeper-e2e
+          registry: true
+      # Pre-install kustomize into ./bin with the Makefile's version instead of
+      # the install script, which trips GitHub's unauthenticated API rate limit.
+      - name: Install kustomize
+        run: |
+          version="$(sed -n 's/^KUSTOMIZE_VERSION ?= //p' Makefile)"
+          GOBIN="${PWD}/bin" go install "sigs.k8s.io/kustomize/kustomize/v5@${version}"
+      - name: Build and push operator image
+        env:
+          IMAGE: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper-operator:e2e
+        run: |
+          docker build \
+            --build-arg VERSION=0.0.0-e2e \
+            --build-arg GIT_SHA="${GITHUB_SHA::7}" \
+            --build-arg GO_VERSION="$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)" \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+      # Test the ZooKeeper image from this commit too: the default image in
+      # the operator can predate script changes (e.g. the Logback config).
+      - name: Build and push ZooKeeper image
+        env:
+          IMAGE: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper:e2e
+        run: |
+          docker build -t zookeeper-apache:e2e docker/zookeeper-image
+          docker build --build-arg BASE_IMAGE=zookeeper-apache:e2e -t "$IMAGE" docker
+          docker push "$IMAGE"
+      - name: Deploy operator
+        env:
+          IMAGE: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper-operator:e2e
+        run: |
+          make deploy TEST_IMAGE="$IMAGE"
+          kubectl rollout status deployment/zookeeper-operator --timeout=180s
+      - name: Run e2e tests
+        env:
+          RUN_LOCAL: "false"
+          ZK_IMAGE_REPOSITORY: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper
+          ZK_IMAGE_TAG: e2e
+        run: go test -v -timeout 2h ./test/e2e/... -args -ginkgo.v
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl get all,pvc,events -A -o wide || true
+          kubectl get zookeeperclusters -A -o yaml || true
+          kubectl logs deployment/zookeeper-operator --tail=500 || true

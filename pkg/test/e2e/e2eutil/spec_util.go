@@ -11,14 +11,17 @@
 package e2eutil
 
 import (
+	"os"
+
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // NewDefaultCluster returns a cluster with an empty spec, which will be filled
-// with default values
+// with default values. ZK_IMAGE_REPOSITORY / ZK_IMAGE_TAG override the
+// ZooKeeper image, so the suite can test an image built from the same commit.
 func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
-	return &api.ZookeeperCluster{
+	cluster := &api.ZookeeperCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ZookeeperCluster",
 			APIVersion: "zookeeper.pravega.io/v1beta1",
@@ -29,6 +32,9 @@ func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 		},
 		Spec: api.ZookeeperClusterSpec{},
 	}
+	cluster.Spec.Image.Repository = os.Getenv("ZK_IMAGE_REPOSITORY")
+	cluster.Spec.Image.Tag = os.Getenv("ZK_IMAGE_TAG")
+	return cluster
 }
 
 func NewClusterWithVersion(namespace, version string) *api.ZookeeperCluster {

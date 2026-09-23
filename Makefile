@@ -41,8 +41,10 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # Install CRDs into a cluster
+# Server-side apply: the CRD exceeds the 256KiB last-applied-configuration
+# annotation limit of client-side apply.
 install: manifests kustomize
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+	$(KUSTOMIZE) build config/crd | kubectl apply --server-side -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests kustomize
@@ -59,18 +61,16 @@ manifests: controller-gen
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image pravega/zookeeper-operator=$(TEST_IMAGE)
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+	$(KUSTOMIZE) build config/default | kubectl apply --server-side -f -
 
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy-test: manifests kustomize
-	cd config/test
-	$(KUSTOMIZE) build config/test | kubectl apply -f -
+	$(KUSTOMIZE) build config/test | kubectl apply --server-side -f -
 
 # Undeploy controller in the configured Kubernetes cluster in ~/.kube/config
 undeploy-test: manifests kustomize
-	cd config/test
-	$(KUSTOMIZE) build config/test | kubectl apply -f -
+	$(KUSTOMIZE) build config/test | kubectl delete --ignore-not-found -f -
 
 # Undeploy controller in the configured Kubernetes cluster in ~/.kube/config
 undeploy:
