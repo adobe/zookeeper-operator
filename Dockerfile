@@ -1,7 +1,11 @@
 ARG DOCKER_REGISTRY
 ARG DISTROLESS_DOCKER_REGISTRY
 ARG ALPINE_VERSION=3.22
-FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.25-alpine${ALPINE_VERSION} AS go-builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.25-alpine${ALPINE_VERSION} AS go-builder
+
+# Populated automatically by BuildKit with the target platform of each build.
+ARG TARGETOS
+ARG TARGETARCH
 
 ARG PROJECT_NAME=zookeeper-operator
 ARG REPO_PATH=github.com/adobe/$PROJECT_NAME
@@ -26,7 +30,7 @@ COPY api/ api/
 COPY controllers/ controllers/
 
 # Build
-RUN GOOS=linux CGO_ENABLED=0 go build -o /src/${PROJECT_NAME} \
+RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} CGO_ENABLED=0 go build -o /src/${PROJECT_NAME} \
     -ldflags "-X ${REPO_PATH}/pkg/version.Version=${VERSION} -X ${REPO_PATH}/pkg/version.GitSHA=${GIT_SHA}" main.go
 
 FROM ${DISTROLESS_DOCKER_REGISTRY:-gcr.io/}distroless/static-debian11:nonroot AS final
