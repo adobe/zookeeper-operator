@@ -11,16 +11,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.25
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: 1.25
+          go-version-file: go.mod
         id: go
       - name: Set up Go for root
         run: |
           sudo ln -sf `which go` `sudo which go` || true
           sudo go version
-      - uses: actions/checkout@v7
 
       - name: Check values schema json
         uses: losisin/helm-values-schema-json-action@v3
@@ -38,7 +39,9 @@ jobs:
         env:
           DOCKER_BUILDKIT: 1
         run: |
+          GO_VERSION=$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)
           docker build \
             --build-arg VERSION=0.0.0-ci \
             --build-arg GIT_SHA=${GITHUB_SHA::7} \
+            --build-arg GO_VERSION=${GO_VERSION} \
             -t zookeeper-operator:ci .

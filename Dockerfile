@@ -1,4 +1,9 @@
-FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.25-alpine3.22 AS go-builder
+# GO_VERSION must be supplied at build time (see Makefile/CI, which derive it
+# from the `go` directive in go.mod) so the builder image always matches the
+# toolchain version the module actually requires. The default below is only a
+# fallback for ad-hoc `docker build .` invocations without --build-arg.
+ARG GO_VERSION=1.26
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:${GO_VERSION}-alpine3.24 AS go-builder
 
 # Populated automatically by BuildKit with the target platform of each build.
 ARG TARGETOS
