@@ -63,7 +63,9 @@ var _ = BeforeSuite(func() {
 	/*
 		Then, we start the envtest cluster.
 	*/
-	cfg, err := testEnv.Start()
+	// Assign (not :=) so the package-level cfg used by the specs is set.
+	var err error
+	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
@@ -87,7 +89,7 @@ var _ = BeforeSuite(func() {
 	if os.Getenv("RUN_LOCAL") == "true" {
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
-			Cache:  cache.Options{Namespaces: []string{testNamespace}},
+			Cache:  cache.Options{DefaultNamespaces: map[string]cache.Config{testNamespace: {}}},
 		})
 		Expect(err).ToNot(HaveOccurred())
 
