@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.25-alpine3.22 AS go-builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.26-alpine3.22 AS go-builder
 
 # Populated automatically by BuildKit with the target platform of each build.
 ARG TARGETOS
