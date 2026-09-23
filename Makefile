@@ -131,7 +131,7 @@ build-go:
 		-o bin/$(EXPORTER_NAME)-windows-amd64.exe cmd/exporter/main.go
 
 build-image:
-	docker build --build-arg VERSION=$(VERSION) --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg DISTROLESS_DOCKER_REGISTRY=$(DISTROLESS_DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) -t $(REPO):$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_SHA=$(GIT_SHA) -t $(REPO):$(VERSION) .
 	docker tag $(REPO):$(VERSION) $(REPO):latest
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple

@@ -21,9 +21,15 @@ updates:
         patterns:
           - "*"
 
-  # Tool versions tracking via Docker ecosystem (grouped into single PR)
+  # Docker base images (grouped into single PR)
+  # Every directory containing a Dockerfile must be listed explicitly:
+  # Dependabot does not search subdirectories.
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/"
+      - "/build"
+      - "/docker"
+      - "/docker/zookeeper-image"
     schedule:
       interval: "weekly"
       day: "wednesday"
@@ -32,8 +38,34 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    ignore:
+      # The Apache ZooKeeper version is managed manually: it is pinned in
+      # several places that Dependabot cannot see (tarball download in
+      # docker/zookeeper-image/Dockerfile, release.yml tags and
+      # DefaultZkContainerVersion in api/v1beta1/zookeepercluster_types.go),
+      # so a Dockerfile-only bump would leave the repository inconsistent.
+      - dependency-name: "*zookeeper*"
     groups:
       docker-dependencies:
+        patterns:
+          - "*"
+
+  # Gradle dependencies for the "zu" helper tool (grouped into single PR)
+  - package-ecosystem: "gradle"
+    directory: "/docker/zu"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      # See the note above: the ZooKeeper version is managed manually.
+      - dependency-name: "org.apache.zookeeper:*"
+    groups:
+      gradle-dependencies:
         patterns:
           - "*"
 
@@ -41,9 +73,8 @@ updates:
   # =============================================================================
   # GO MODULES CONFIGURATION WITH GROUPING
   # =============================================================================
-  # Using groups to combine all Go module updates into fewer PRs.
-  # Note: Groups work within each package-ecosystem entry, so we separate:
-  # - Main modules (rot)
+  # Grouping combines all Go module updates into a single PR.
+  # Groups apply per package-ecosystem entry.
   #
   # Current go.mod files detected:
   # - / (root)
