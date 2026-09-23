@@ -117,7 +117,7 @@ RUN set -eux; \
 
 # Single source of truth for the Apache ZooKeeper version. Everything else in
 # this file, and the image tags in .github/workflows/release.yml, derive from it.
-ARG ZK_VERSION=3.8.4
+ARG ZK_VERSION=3.8.7
 ARG SHORT_DISTRO_NAME=zookeeper-${ZK_VERSION}
 ARG DISTRO_NAME=apache-zookeeper-${ZK_VERSION}-bin
 

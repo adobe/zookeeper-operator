@@ -105,6 +105,7 @@ jobs:
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper
           tags: |
             type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache-${{ needs.prepare.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache
           labels: |
             org.opencontainers.image.description=Apache Zookeeper ${{ needs.prepare.outputs.zk_version }} with OpenJDK 21
       - name: Build and push zookeeper Apache image
@@ -130,7 +131,7 @@ jobs:
       - name: Verify base image matches the Apache ZooKeeper version
         run: |
           base_tag="$(sed -n 's|^FROM .*adobe/zookeeper:||p' docker/Dockerfile)"
-          expected="${{ needs.prepare.outputs.zk_version }}-apache-"
+          expected="${{ needs.prepare.outputs.zk_version }}-apache"
           echo "Base image tag: $base_tag (expected prefix: $expected)"
           case "$base_tag" in
             "$expected"*) ;;

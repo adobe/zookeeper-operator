@@ -24,12 +24,41 @@ updates:
   # Docker base images (grouped into single PR)
   # Every directory containing a Dockerfile must be listed explicitly:
   # Dependabot does not search subdirectories.
+  #
+  # The adobe/zookeeper base image in docker/Dockerfile is deliberately NOT
+  # ignored here. It is pinned to the floating "<zk version>-apache" tag that
+  # the build-zookeeper-apache release job publishes, so the only candidates
+  # Dependabot can resolve are images this repository built from ARG ZK_VERSION
+  # in docker/zookeeper-image/Dockerfile. Letting Dependabot raise that bump
+  # automates the step that re-synchronises docker/Dockerfile with a new
+  # ARG ZK_VERSION after the ZooKeeper image has been released.
   - package-ecosystem: "docker"
     directories:
       - "/"
       - "/build"
       - "/docker"
-      - "/docker/zookeeper-image"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
+
+  # The Apache ZooKeeper server version itself is managed manually. It is the
+  # tarball downloaded by ARG ZK_VERSION in docker/zookeeper-image/Dockerfile,
+  # which Dependabot cannot see, and bumping it requires a coordinated release:
+  # bump ARG ZK_VERSION, push a zk<date> tag to publish the base image, let
+  # Dependabot bump docker/Dockerfile to the new "<ver>-apache" tag, push the
+  # operator release tag, then update DefaultZkContainerVersion.
+  # Only the debian base image is automated here.
+  - package-ecosystem: "docker"
+    directory: "/docker/zookeeper-image"
     schedule:
       interval: "weekly"
       day: "wednesday"
@@ -39,14 +68,9 @@ updates:
       prefix: "chore"
       include: "scope"
     ignore:
-      # The Apache ZooKeeper version is managed manually: it is pinned in
-      # several places that Dependabot cannot see (tarball download in
-      # docker/zookeeper-image/Dockerfile, release.yml tags and
-      # DefaultZkContainerVersion in api/v1beta1/zookeepercluster_types.go),
-      # so a Dockerfile-only bump would leave the repository inconsistent.
       - dependency-name: "*zookeeper*"
     groups:
-      docker-dependencies:
+      zookeeper-image-dependencies:
         patterns:
           - "*"
 
