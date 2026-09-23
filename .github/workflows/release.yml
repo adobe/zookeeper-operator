@@ -26,7 +26,10 @@ jobs:
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
       built_at: ${{ steps.date.outputs.built_at }}
+      zk_version: ${{ steps.zk.outputs.zk_version }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
       - name: Get tag name
         id: vars
         run: echo "tag=${GITHUB_REF:10}" >> $GITHUB_OUTPUT
@@ -34,6 +37,16 @@ jobs:
         id: date
         run: |
           echo "built_at=$(date --rfc-3339=date)" >> $GITHUB_OUTPUT
+      - name: Resolve Apache ZooKeeper version
+        id: zk
+        run: |
+          zk_version="$(sed -n 's/^ARG ZK_VERSION=//p' docker/zookeeper-image/Dockerfile)"
+          if [ -z "$zk_version" ]; then
+            echo "::error::Could not read ARG ZK_VERSION from docker/zookeeper-image/Dockerfile"
+            exit 1
+          fi
+          echo "Apache ZooKeeper version: $zk_version"
+          echo "zk_version=$zk_version" >> $GITHUB_OUTPUT
 
   operator-test:
     runs-on: ubuntu-latest
@@ -91,9 +104,9 @@ jobs:
             ${{ env.DOCKERHUB_ZK_IMAGE }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper
           tags: |
-            type=raw,value=3.8.4-apache-${{ needs.prepare.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache-${{ needs.prepare.outputs.tag }}
           labels: |
-            org.opencontainers.image.description=Apache Zookeeper 3.8.4 with OpenJDK 21
+            org.opencontainers.image.description=Apache Zookeeper ${{ needs.prepare.outputs.zk_version }} with OpenJDK 21
       - name: Build and push zookeeper Apache image
         uses: docker/build-push-action@v6
         with:
@@ -114,6 +127,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      - name: Verify base image matches the Apache ZooKeeper version
+        run: |
+          base_tag="$(sed -n 's|^FROM .*adobe/zookeeper:||p' docker/Dockerfile)"
+          expected="${{ needs.prepare.outputs.zk_version }}-apache-"
+          echo "Base image tag: $base_tag (expected prefix: $expected)"
+          case "$base_tag" in
+            "$expected"*) ;;
+            *) echo "::error::docker/Dockerfile base image tag '$base_tag' does not match ARG ZK_VERSION '${{ needs.prepare.outputs.zk_version }}' in docker/zookeeper-image/Dockerfile"; exit 1 ;;
+          esac
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -137,7 +159,7 @@ jobs:
             ${{ env.DOCKERHUB_ZK_IMAGE }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper
           tags: |
-            type=raw,value=3.8.4-${{ needs.prepare.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.zk_version }}-${{ needs.prepare.outputs.tag }}
           labels: |
             org.opencontainers.image.description=Apache Zookeeper image build with java-21
       - name: Build and push zookeeper image
