@@ -1,14 +1,13 @@
-ARG DOCKER_REGISTRY
-ARG DISTROLESS_DOCKER_REGISTRY
-ARG ALPINE_VERSION=3.22
-FROM --platform=${BUILDPLATFORM:-linux/amd64} ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.25-alpine${ALPINE_VERSION} AS go-builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.25-alpine3.22 AS go-builder
 
 # Populated automatically by BuildKit with the target platform of each build.
 ARG TARGETOS
 ARG TARGETARCH
 
 ARG PROJECT_NAME=zookeeper-operator
-ARG REPO_PATH=github.com/adobe/$PROJECT_NAME
+# Must match the module path in go.mod, otherwise the -X ldflags below
+# silently do nothing and the binary reports its hardcoded default version.
+ARG REPO_PATH=github.com/pravega/$PROJECT_NAME
 
 # Build version and commit should be passed in when performing docker build
 ARG VERSION=0.0.0-localdev
@@ -33,7 +32,7 @@ COPY controllers/ controllers/
 RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} CGO_ENABLED=0 go build -o /src/${PROJECT_NAME} \
     -ldflags "-X ${REPO_PATH}/pkg/version.Version=${VERSION} -X ${REPO_PATH}/pkg/version.GitSHA=${GIT_SHA}" main.go
 
-FROM ${DISTROLESS_DOCKER_REGISTRY:-gcr.io/}distroless/static-debian11:nonroot AS final
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS final
 
 # Re-declare ARG variables for the final stage
 ARG PROJECT_NAME=zookeeper-operator
