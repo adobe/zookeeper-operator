@@ -13,11 +13,12 @@ CRD_OPTIONS ?= "crd:crdVersions=v1,generateEmbeddedObjectMeta=true"
 PROJECT_NAME=zookeeper-operator
 EXPORTER_NAME=zookeeper-exporter
 APP_NAME=zookeeper
-REPO=pravega/$(PROJECT_NAME)
+REPO?=adobe/$(PROJECT_NAME)
 TEST_REPO=testzkop/$(PROJECT_NAME)
-APP_REPO=pravega/$(APP_NAME)
-ALTREPO=emccorp/$(PROJECT_NAME)
-APP_ALTREPO=emccorp/$(APP_NAME)
+APP_REPO?=adobe/$(APP_NAME)
+# Go module path (still github.com/pravega/...), used for the -X ldflags.
+# Kept separate from REPO, which is only the Docker image name.
+MODULE=$(shell awk '/^module /{print $$2}' go.mod)
 VERSION=$(shell git describe --always --tags --dirty | tr -d "v" | sed "s/\(.*\)-g`git rev-parse --short HEAD`/\1/")
 GIT_SHA=$(shell git rev-parse --short HEAD)
 # Single source of truth for the operator's builder image Go version: read the
@@ -119,22 +120,22 @@ build: test build-go build-image
 
 build-go:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(PROJECT_NAME)-linux-amd64 main.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(EXPORTER_NAME)-linux-amd64 cmd/exporter/main.go
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(PROJECT_NAME)-darwin-amd64 main.go
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(EXPORTER_NAME)-darwin-amd64 cmd/exporter/main.go
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(PROJECT_NAME)-windows-amd64.exe main.go
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build \
-		-ldflags "-X github.com/$(REPO)/pkg/version.Version=$(VERSION) -X github.com/$(REPO)/pkg/version.GitSHA=$(GIT_SHA)" \
+		-ldflags "-X $(MODULE)/pkg/version.Version=$(VERSION) -X $(MODULE)/pkg/version.GitSHA=$(GIT_SHA)" \
 		-o bin/$(EXPORTER_NAME)-windows-amd64.exe cmd/exporter/main.go
 
 build-image:
@@ -198,14 +199,6 @@ push: build-image build-zk-image login
 	docker push $(REPO):latest
 	docker push $(APP_REPO):$(VERSION)
 	docker push $(APP_REPO):latest
-	docker tag $(REPO):$(VERSION) $(ALTREPO):$(VERSION)
-	docker tag $(REPO):$(VERSION) $(ALTREPO):latest
-	docker tag $(APP_REPO):$(VERSION) $(APP_ALTREPO):$(VERSION)
-	docker tag $(APP_REPO):$(VERSION) $(APP_ALTREPO):latest
-	docker push $(ALTREPO):$(VERSION)
-	docker push $(ALTREPO):latest
-	docker push $(APP_ALTREPO):$(VERSION)
-	docker push $(APP_ALTREPO):latest
 
 clean:
 	rm -f bin/$(PROJECT_NAME)
