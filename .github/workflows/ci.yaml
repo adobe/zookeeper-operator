@@ -1,47 +1,97 @@
 name: ci
-permissions:
-  contents: read
 
 on:
   pull_request:
+  push:
     branches:
-      - '**'
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
+  go:
+    name: go checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go-checks
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-        id: go
-      - name: Set up Go for root
-        run: |
-          sudo ln -sf `which go` `sudo which go` || true
-          sudo go version
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+          # The existing code base still carries legacy findings; only report
+          # issues introduced by the change under review.
+          only-new-issues: true
 
+  helm:
+    name: helm chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.22.0
       - name: Check values schema json
         uses: losisin/helm-values-schema-json-action@v3
         with:
           values: values.yaml
           working-directory: charts/zookeeper-operator
           fail-on-diff: true
-      - name: get go version
-        run: go version
-      - name: Gofmt and License checks
-        run: make check
-      - name: unit tests
-        run: make test
-      - name: Build Docker image (no push)
-        env:
-          DOCKER_BUILDKIT: 1
+      - name: helm lint
+        run: helm lint --strict charts/zookeeper-operator
+      - name: Validate rendered manifests with kubeconform
         run: |
-          GO_VERSION=$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)
-          docker build \
-            --build-arg VERSION=0.0.0-ci \
-            --build-arg GIT_SHA=${GITHUB_SHA::7} \
-            --build-arg GO_VERSION=${GO_VERSION} \
-            -t zookeeper-operator:ci .
+          helm template zookeeper-operator charts/zookeeper-operator \
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
+                -strict -summary -ignore-missing-schemas
+
+  operator-image:
+    name: operator image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Extract Go version from go.mod
+        id: govars
+        run: echo "go_version=$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+      # The Dockerfile cross-compiles natively (BUILDPLATFORM + TARGETARCH), so
+      # both platforms build without QEMU.
+      - uses: docker/setup-buildx-action@v4
+      - name: Build operator image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=0.0.0-ci
+            GIT_SHA=${{ github.sha }}
+            GO_VERSION=${{ steps.govars.outputs.go_version }}
+          push: false
+          cache-from: type=gha,scope=operator
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=operator' || '' }}

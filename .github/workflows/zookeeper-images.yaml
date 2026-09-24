@@ -1,0 +1,96 @@
+# Builds the Apache ZooKeeper base image (docker/zookeeper-image) and the
+# operator-flavoured ZooKeeper image (docker/Dockerfile) on every change to
+# them, so a ZooKeeper, JDK, zu or script change is validated before a release
+# tag is pushed rather than after.
+name: zookeeper-images
+
+on:
+  pull_request:
+    paths:
+      - 'docker/**'
+      - '.github/workflows/zookeeper-images.yaml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'docker/**'
+      - '.github/workflows/zookeeper-images.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners per architecture: no QEMU emulation needed.
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Resolve ZooKeeper version
+        id: zk
+        run: |
+          zk_version="$(sed -n 's/^ARG ZK_VERSION=//p' docker/zookeeper-image/Dockerfile)"
+          if [ -z "$zk_version" ]; then
+            echo "::error::Could not read ARG ZK_VERSION from docker/zookeeper-image/Dockerfile"
+            exit 1
+          fi
+          echo "zk_version=${zk_version}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build Apache ZooKeeper base image
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/zookeeper-image
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=oci,dest=${{ runner.temp }}/zookeeper-apache,tar=false
+          cache-from: type=gha,scope=zookeeper-apache-${{ matrix.arch }}
+          cache-to: ${{ github.event_name == 'push' && format('type=gha,mode=max,scope=zookeeper-apache-{0}', matrix.arch) || '' }}
+
+      # Same pairing as the release job: docker/Dockerfile is built FROM the
+      # base image just built (via BASE_IMAGE), here resolved from the local
+      # OCI layout through a named build context instead of a registry.
+      - name: Build ZooKeeper image on top of the freshly built base
+        uses: docker/build-push-action@v7
+        with:
+          context: docker
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            BASE_IMAGE=zookeeper-apache:ci
+          build-contexts: |
+            zookeeper-apache:ci=oci-layout://${{ runner.temp }}/zookeeper-apache
+          tags: zookeeper:ci
+          load: true
+          cache-from: type=gha,scope=zookeeper-${{ matrix.arch }}
+          cache-to: ${{ github.event_name == 'push' && format('type=gha,mode=max,scope=zookeeper-{0}', matrix.arch) || '' }}
+
+      - name: Smoke test image
+        env:
+          ZK_VERSION: ${{ steps.zk.outputs.zk_version }}
+        run: |
+          docker run --rm --entrypoint bash -e ZK_VERSION zookeeper:ci -ec '
+            java -version
+            zkServer.sh version 2>/dev/null | tee /dev/stderr | grep -q "${ZK_VERSION}"
+            test -s /opt/libs/zu.jar
+            for s in zookeeperStart.sh zookeeperReady.sh zookeeperLive.sh zookeeperTeardown.sh zookeeperMetrics.sh; do
+              test -x "/usr/local/bin/${s}"
+            done
+            command -v dig curl socat pgrep >/dev/null
+          '

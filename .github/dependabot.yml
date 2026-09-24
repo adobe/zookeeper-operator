@@ -4,6 +4,8 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+# cooldown: wait a week after a release before proposing it, so a compromised
+# or quickly-yanked version is less likely to be picked up.
 updates:
   # GitHub Actions dependencies (grouped into single PR)
   - package-ecosystem: "github-actions"
@@ -13,6 +15,8 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -38,6 +42,8 @@ updates:
       day: "wednesday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -48,9 +54,9 @@ updates:
 
   # The Apache ZooKeeper server version itself is managed manually. It is the
   # tarball downloaded by ARG ZK_VERSION in docker/zookeeper-image/Dockerfile,
-  # which Dependabot cannot see. To bump it: update ARG ZK_VERSION, push the
-  # operator release tag (the release job rebuilds the base image and the
-  # final zookeeper image together), then update DefaultZkContainerVersion.
+  # which Dependabot cannot see. To bump it: update ARG ZK_VERSION, publish a
+  # GitHub release (the release job rebuilds the base image and the final
+  # zookeeper image together), then update DefaultZkContainerVersion.
   # Only the debian base image is automated here.
   - package-ecosystem: "docker"
     directory: "/docker/zookeeper-image"
@@ -59,6 +65,8 @@ updates:
       day: "wednesday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -77,6 +85,8 @@ updates:
       day: "thursday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -107,6 +117,8 @@ updates:
       day: "tuesday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"

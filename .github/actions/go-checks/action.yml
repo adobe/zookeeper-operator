@@ -1,0 +1,41 @@
+# Go verification shared by ci.yaml (pull requests / master) and release.yml
+# (GitHub releases), so both gate on exactly the same checks.
+# The calling job must check out the repository first.
+name: go-checks
+description: Gofmt/license checks, go vet, generated-code drift check and unit tests with coverage.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+    - name: Gofmt and license checks
+      shell: bash
+      run: make check
+    - name: go vet
+      shell: bash
+      run: go vet ./...
+    - name: Regenerate code, CRDs and the Helm chart CRD
+      shell: bash
+      run: make controller-gen generate
+    - name: Fail on generated file drift
+      shell: bash
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          git status --short
+          git --no-pager diff
+          echo "::error::Generated files are out of date. Run 'make generate' and commit the result."
+          exit 1
+        fi
+    - name: Unit tests
+      shell: bash
+      run: make test
+    - name: Upload coverage report
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: coverage
+        path: coverage.txt
+        if-no-files-found: ignore
+        retention-days: 14
