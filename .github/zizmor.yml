@@ -1,0 +1,11 @@
+rules:
+  # The "$/..." self-repository syntax is not understood by actionlint yet
+  # (1.7.12). Re-enable and switch the local action references once it is.
+  self-repository:
+    disable: true
+  # Actions are referenced by version tag (vMajor where the action publishes
+  # one) rather than commit SHA; Dependabot keeps the tags current.
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin

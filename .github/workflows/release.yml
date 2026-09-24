@@ -1,16 +1,22 @@
+# Release pipeline, triggered by publishing a GitHub release (any tag name):
+# run the Go checks, then publish the Apache ZooKeeper base image, the
+# ZooKeeper and operator images and the Helm chart for the release tag.
+#
+# Images and the chart are pushed by digest and signed keylessly with cosign.
+# No build cache is used here, so a poisoned cache from another workflow can
+# never end up in a published artifact.
 name: release
 
 on:
-  push:
-    tags:
-      - '*'
-      # zk* tags used to release the Apache ZooKeeper base image on its own.
-      # That image is now built as part of every operator release.
-      - '!zk*'
+  release:
+    types: [published]
 
+# Never cancel a release half way through publishing images.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+permissions: {}
 
 env:
   # GitHub Container Registry
@@ -24,22 +30,31 @@ env:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
-      built_at: ${{ steps.date.outputs.built_at }}
+      built_at: ${{ steps.vars.outputs.built_at }}
       zk_version: ${{ steps.zk.outputs.zk_version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Get tag name
+        with:
+          persist-credentials: false
+      - name: Validate tag and derive release variables
         id: vars
-        run: echo "tag=${GITHUB_REF:10}" >> $GITHUB_OUTPUT
-      - name: Set Release Date
-        id: date
         run: |
-          echo "built_at=$(date --rfc-3339=date)" >> $GITHUB_OUTPUT
+          tag="${GITHUB_REF_NAME}"
+          # The tag ends up in image tags, the chart version and sed expressions.
+          if ! [[ "$tag" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+            echo "::error::Unsupported tag name '${tag}'"
+            exit 1
+          fi
+          {
+            echo "tag=${tag}"
+            echo "built_at=$(date --rfc-3339=date)"
+          } >> "$GITHUB_OUTPUT"
       - name: Resolve Apache ZooKeeper version
         id: zk
         run: |
@@ -49,44 +64,39 @@ jobs:
             exit 1
           fi
           echo "Apache ZooKeeper version: $zk_version"
-          echo "zk_version=$zk_version" >> $GITHUB_OUTPUT
+          echo "zk_version=$zk_version" >> "$GITHUB_OUTPUT"
 
-  operator-test:
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: prepare
     permissions:
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Set up Go
-        uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
-        id: go
-      - name: Set up Go for root
-        run: |
-          sudo ln -sf `which go` `sudo which go` || true
-          sudo go version
-      - name: get go version
-        run: go version
-      - name: Gofmt and License checks
-        run: make check
-      - name: unit tests
-        run: make test
+          persist-credentials: false
+      - uses: ./.github/actions/go-checks
 
   build-zookeeper:
     runs-on: ubuntu-latest
-    needs: [prepare, operator-test]
+    timeout-minutes: 90
+    needs: [prepare, checks]
     permissions:
       contents: read
       packages: write
+      id-token: write # cosign keyless signing
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: Login to DockerHub Registry
         uses: docker/login-action@v4
         with:
@@ -121,7 +131,18 @@ jobs:
           tags: ${{ steps.meta-zk-apache.outputs.tags }}
           labels: ${{ steps.meta-zk-apache.outputs.labels }}
           annotations: ${{ steps.meta-zk-apache.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
           push: true
+      - name: Sign zookeeper Apache image
+        env:
+          TAGS: ${{ steps.meta-zk-apache.outputs.tags }}
+          DIGEST: ${{ steps.build-zk-apache.outputs.digest }}
+        run: |
+          # Sign once per repository (tags stripped), by digest.
+          sed 's/:[^:/]*$//' <<<"$TAGS" | sort -u | while read -r image; do
+            cosign sign --yes "${image}@${DIGEST}"
+          done
       - name: Extract Docker metadata for zookeeper
         id: meta-zk
         uses: docker/metadata-action@v6
@@ -134,6 +155,7 @@ jobs:
           labels: |
             org.opencontainers.image.description=Apache Zookeeper image build with java-21
       - name: Build and push zookeeper image
+        id: build-zk
         uses: docker/build-push-action@v7
         with:
           context: docker
@@ -144,24 +166,40 @@ jobs:
           tags: ${{ steps.meta-zk.outputs.tags }}
           labels: ${{ steps.meta-zk.outputs.labels }}
           annotations: ${{ steps.meta-zk.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
           push: true
+      - name: Sign zookeeper image
+        env:
+          TAGS: ${{ steps.meta-zk.outputs.tags }}
+          DIGEST: ${{ steps.build-zk.outputs.digest }}
+        run: |
+          # Sign once per repository (tags stripped), by digest.
+          sed 's/:[^:/]*$//' <<<"$TAGS" | sort -u | while read -r image; do
+            cosign sign --yes "${image}@${DIGEST}"
+          done
 
   build-operator:
     runs-on: ubuntu-latest
-    needs: [prepare, operator-test]
+    timeout-minutes: 45
+    needs: [prepare, checks]
     permissions:
       contents: read
       packages: write
+      id-token: write # cosign keyless signing
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Extract Go version from go.mod
         id: govars
         run: echo "go_version=$(awk '/^go /{print $2}' go.mod | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      # No QEMU: the Dockerfile cross-compiles natively (BUILDPLATFORM + TARGETARCH)
+      # and the distroless final stage has no RUN instructions.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: Login to DockerHub Registry
         uses: docker/login-action@v4
         with:
@@ -174,7 +212,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract Docker metadata for zookeeper-operator
-        id: meta-operator
+        id: meta
         uses: docker/metadata-action@v6
         with:
           images: |
@@ -185,42 +223,73 @@ jobs:
           labels: |
             org.opencontainers.image.description=Zookeeper Operator for Kubernetes
       - name: Build and push zookeeper-operator image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ fromJSON(steps.meta-operator.outputs.json).labels['org.opencontainers.image.version'] }}
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
             BUILT_AT=${{ needs.prepare.outputs.built_at }}
             GIT_SHA=${{ github.sha }}
             GO_VERSION=${{ steps.govars.outputs.go_version }}
-          tags: ${{ steps.meta-operator.outputs.tags }}
-          labels: ${{ steps.meta-operator.outputs.labels }}
-          annotations: ${{ steps.meta-operator.outputs.annotations }}
-          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
+          push: true
+      - name: Sign image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # Sign once per repository (tags stripped), by digest.
+          sed 's/:[^:/]*$//' <<<"$TAGS" | sort -u | while read -r image; do
+            cosign sign --yes "${image}@${DIGEST}"
+          done
 
   release-helm:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [prepare, build-zookeeper, build-operator]
     permissions:
       contents: read
       packages: write
+      id-token: write # cosign keyless signing
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Update Chart.yaml version
-        run: |
-          sed -i "s/^version:.*/version: \"${{ needs.prepare.outputs.tag }}\"/" charts/zookeeper-operator/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.prepare.outputs.tag }}\"/" charts/zookeeper-operator/Chart.yaml
-          sed -i "/^image:/,/^[^ ]/ s/^  tag:.*/  tag: ${{ needs.prepare.outputs.tag }}/" charts/zookeeper-operator/values.yaml
-      - name: Push Helm Chart to GHCR
-        uses: appany/helm-oci-chart-releaser@v0.5.0
         with:
-          name: zookeeper-operator
-          repository: ${{ github.repository_owner }}/helm-charts
-          tag: ${{ needs.prepare.outputs.tag }}
-          path: charts/zookeeper-operator
+          persist-credentials: false
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.22.0
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Log into GitHub Container Registry ${{ env.GHCR_REGISTRY }}
+        uses: docker/login-action@v4
+        with:
           registry: ${{ env.GHCR_REGISTRY }}
-          registry_username: ${{ github.actor }}
-          registry_password: ${{ secrets.GITHUB_TOKEN }}
-          update_dependencies: 'true'
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update Chart.yaml and values.yaml versions
+        run: |
+          sed -i "s/^version:.*/version: \"${TAG}\"/" charts/zookeeper-operator/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${TAG}\"/" charts/zookeeper-operator/Chart.yaml
+          sed -i "/^image:/,/^[^ ]/ s/^  tag:.*/  tag: ${TAG}/" charts/zookeeper-operator/values.yaml
+      - name: Package, push and sign Helm chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chart_repo="${GHCR_REGISTRY}/${GITHUB_REPOSITORY_OWNER,,}/helm-charts"
+          printf '%s' "$GITHUB_TOKEN" | helm registry login "$GHCR_REGISTRY" --username "$GITHUB_ACTOR" --password-stdin
+          helm package charts/zookeeper-operator --dependency-update --destination dist
+          helm push "dist/zookeeper-operator-${TAG}.tgz" "oci://${chart_repo}" 2>&1 | tee push.log
+          digest="$(awk '/^Digest:/{print $2}' push.log)"
+          if [ -z "$digest" ]; then
+            echo "::error::Could not determine the pushed chart digest"
+            exit 1
+          fi
+          cosign sign --yes "${chart_repo}/zookeeper-operator@${digest}"

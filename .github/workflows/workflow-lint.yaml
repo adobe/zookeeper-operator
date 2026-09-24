@@ -1,0 +1,54 @@
+# Static analysis of the GitHub Actions workflows: actionlint for syntax,
+# expressions and embedded shell, zizmor for security issues (template
+# injection, excessive permissions, credential persistence, unpinned actions...).
+name: workflow-lint
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          docker run --rm -v "${PWD}:/repo" --workdir /repo \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@v0.6.4
+        with:
+          version: v1.30.1
+          # Fail the job and annotate the PR instead of uploading SARIF, which
+          # also works for pull requests from forks (read-only token).
+          advanced-security: false
+          annotations: true
+          config: .github/zizmor.yml
