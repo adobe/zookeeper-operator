@@ -8,12 +8,12 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME /usr/local/openjdk-21
-ENV PATH $JAVA_HOME/bin:$PATH
+ENV JAVA_HOME=/usr/local/openjdk-21
+ENV PATH=$JAVA_HOME/bin:$PATH
 
 # Default to UTF-8 file.encoding
-ENV LANG C.UTF-8
-ENV JAVA_VERSION 21
+ENV LANG=C.UTF-8
+ENV JAVA_VERSION=21
 
 RUN set -eux; \
 	\
@@ -151,9 +151,9 @@ RUN set -eux; \
     mv "$DISTRO_NAME/conf/"* "$ZOO_CONF_DIR"; \
     rm -rf "$GNUPGHOME" "KEYS" "$DISTRO_NAME.tar.gz" "$DISTRO_NAME.tar.gz.asc" "$DISTRO_NAME/docs"; \
     chown -R zookeeper:zookeeper "/$DISTRO_NAME"
-COPY opt/zkEnv.sh  $DISTRO_NAME/bin/zkEnv.sh
+COPY opt/zkEnv.sh /$DISTRO_NAME/bin/zkEnv.sh
 
-WORKDIR $DISTRO_NAME
+WORKDIR /$DISTRO_NAME
 VOLUME ["$ZOO_DATA_DIR", "$ZOO_DATA_LOG_DIR", "$ZOO_LOG_DIR"]
 
 EXPOSE 2181 2888 3888 8080
