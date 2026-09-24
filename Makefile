@@ -157,8 +157,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- docker buildx rm zookeeper-builder
 
 build-zk-image:
-
-	docker build --build-arg VERSION=$(VERSION)  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) -t $(APP_REPO):$(VERSION) ./docker
+	docker build -t $(APP_REPO):$(VERSION)-apache ./docker/zookeeper-image
+	docker build --build-arg VERSION=$(VERSION)  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) \
+		--build-arg BASE_IMAGE=$(APP_REPO):$(VERSION)-apache -t $(APP_REPO):$(VERSION) ./docker
 	docker tag $(APP_REPO):$(VERSION) $(APP_REPO):latest
 
 build-zk-image-swarm:

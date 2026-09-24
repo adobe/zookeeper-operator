@@ -1,3 +1,4 @@
+# check=skip=InvalidDefaultArgInFrom
 #
 # Copyright (c) 2018 Dell Inc., or its subsidiaries. All Rights Reserved.
 #
@@ -8,6 +9,12 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
+# Base Apache ZooKeeper + OpenJDK 21 image built from docker/zookeeper-image.
+# It is not pinned here: the build-zookeeper release job builds that image
+# first and passes its digest in, so both always come from the same commit
+# and ARG ZK_VERSION. For local builds use `make build-zk-image`.
+ARG BASE_IMAGE
+
 # zu.jar is architecture-independent bytecode, so build it once on the native
 # build platform instead of re-running Gradle under emulation for every target.
 FROM --platform=$BUILDPLATFORM gradle:jdk21 AS zu-builder
@@ -17,16 +24,7 @@ COPY zu /zu
 WORKDIR /zu
 RUN ./gradlew shadowJar --no-daemon
 
-# use forked base zookeeper docker image that runs on openjdk-21.
-# The tag is produced by the build-zookeeper-apache release job from
-# docker/zookeeper-image/Dockerfile, and release.yml asserts that it matches
-# the ARG ZK_VERSION declared there.
-#
-# Keep this pinned to the floating "<zk version>-apache" tag rather than the
-# dated "<zk version>-apache-<git tag>" one: Dependabot only offers a Docker tag
-# update when the tag suffix is unchanged, so the stable suffix is what lets it
-# raise the bump automatically once a new ZooKeeper image has been released.
-FROM adobe/zookeeper:3.8.4-apache-zk-20250914
+FROM ${BASE_IMAGE}
 COPY bin /usr/local/bin
 RUN chmod +x /usr/local/bin/*
 COPY --from=zu-builder /zu/build/libs/zu.jar /opt/libs/
