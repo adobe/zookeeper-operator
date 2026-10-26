@@ -46,7 +46,7 @@ jobs:
       - name: zizmor
         uses: zizmorcore/zizmor-action@v0.6.4
         with:
-          version: v1.30.1
+          version: v1.31.1
           # Fail the job and annotate the PR instead of uploading SARIF, which
           # also works for pull requests from forks (read-only token).
           advanced-security: false

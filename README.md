@@ -30,6 +30,7 @@ The project is currently beta. While no breaking API changes are currently plann
       - [Manual uninstall](#manual-uninstall-1)
     - [The AdminServer](#the-adminserver)
   - [Development](#development)
+    - [Update dependencies](#update-dependencies)
     - [Build the operator image](#build-the-operator-image)
     - [Published Docker Images](#published-docker-images)
     - [Direct access to the cluster](#direct-access-to-the-cluster)
@@ -378,6 +379,26 @@ The list of available commands are
 ```
 
 ## Development
+
+### Update dependencies
+
+Run `./update-go-deps.sh` to update Go modules and build-tool pins in the Makefile
+and CI workflows: kustomize (within v5), controller-tools, golangci-lint, Helm,
+kubeconform, actionlint and zizmor. CI image tags and digests are updated together;
+Helm versions stay synchronized between CI and releases.
+
+Requires Go, Make, Python 3.9+, authenticated GitHub CLI (`gh auth login`), and Docker
+CLI with Buildx. All build-tool lookups and pin matches must succeed before build
+configuration is written. Go module updates are then checked with `go build ./...`.
+Finally, `make manifests generate` regenerates code, CRDs and the Helm chart CRD;
+generation failures stop the updater.
+Review the diff and run the relevant CI checks before committing: stable releases
+can still introduce breaking changes.
+
+GitHub Actions references, general Docker images and Gradle dependencies remain
+managed by Dependabot. Java and ZooKeeper versions are not changed by this script.
+Test the updater without network access or real dependency upgrades with
+`python3 -B -m unittest discover -s scripts -p 'test_update_deps.py'`.
 
 ### Build the operator image
 

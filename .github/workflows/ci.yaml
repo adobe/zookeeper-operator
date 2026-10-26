@@ -39,7 +39,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: v2.15.0
           # The existing code base still carries legacy findings; only report
           # issues introduced by the change under review.
           only-new-issues: true
@@ -54,7 +54,7 @@ jobs:
           persist-credentials: false
       - uses: azure/setup-helm@v5
         with:
-          version: v3.22.0
+          version: v4.3.1
       - name: Check values schema json
         uses: losisin/helm-values-schema-json-action@v3
         with:
