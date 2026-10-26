@@ -40,10 +40,11 @@ jobs:
           registry: true
       # Pre-install kustomize into ./bin with the Makefile's version instead of
       # the install script, which trips GitHub's unauthenticated API rate limit.
+      # Its compiler requirement can be newer than the operator's Go version.
       - name: Install kustomize
         run: |
           version="$(sed -n 's/^KUSTOMIZE_VERSION ?= //p' Makefile)"
-          GOBIN="${PWD}/bin" go install "sigs.k8s.io/kustomize/kustomize/v5@${version}"
+          GOTOOLCHAIN=auto GOBIN="${PWD}/bin" go install "sigs.k8s.io/kustomize/kustomize/v5@${version}"
       - name: Build and push operator image
         env:
           IMAGE: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper-operator:e2e
