@@ -66,5 +66,20 @@ var _ = Describe("Zookeeper Finalizers", func() {
 		It("should return false for result4", func() {
 			Ω(result4).To(Equal(false))
 		})
+		It("should classify the first unused ordinal as orphaned", func() {
+			Ω(IsPVCOrphan("zk-3", 3)).To(BeTrue())
+		})
+		It("should accept the largest int32 ordinal", func() {
+			Ω(IsPVCOrphan("zk-2147483647", 3)).To(BeTrue())
+		})
+		It("should not classify out-of-range ordinals as orphaned", func() {
+			for _, name := range []string{
+				"zk-2147483648",
+				"zk-4294967299",
+				"zk-9223372036854775808",
+			} {
+				Ω(IsPVCOrphan(name, 3)).To(BeFalse(), name)
+			}
+		})
 	})
 })
