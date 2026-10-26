@@ -9,7 +9,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 
-# Base Apache ZooKeeper + OpenJDK 21 image built from docker/zookeeper-image.
+# Base Apache ZooKeeper + OpenJDK 25 image built from docker/zookeeper-image.
 # It is not pinned here: the build-zookeeper release job builds that image
 # first and passes its digest in, so both always come from the same commit
 # and ARG ZK_VERSION. For local builds use `make build-zk-image`.
@@ -17,7 +17,7 @@ ARG BASE_IMAGE
 
 # zu.jar is architecture-independent bytecode, so build it once on the native
 # build platform instead of re-running Gradle under emulation for every target.
-FROM --platform=$BUILDPLATFORM gradle:jdk21 AS zu-builder
+FROM --platform=$BUILDPLATFORM gradle:jdk25 AS zu-builder
 
 RUN mkdir /zu
 COPY zu /zu
@@ -34,7 +34,7 @@ RUN apt-get -q update && \
 
 # OCI standard labels
 LABEL org.opencontainers.image.title="Apache Zookeeper"
-LABEL org.opencontainers.image.description="Apache Zookeeper image build with java-21"
+LABEL org.opencontainers.image.description="Apache Zookeeper image build with java-25"
 LABEL org.opencontainers.image.source="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"

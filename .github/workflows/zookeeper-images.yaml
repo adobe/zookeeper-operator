@@ -87,8 +87,16 @@ jobs:
         run: |
           docker run --rm --entrypoint bash -e ZK_VERSION zookeeper:ci -ec '
             java -version
+            java -XshowSettings:properties -version 2>&1 | grep -Eq "^[[:space:]]*java.specification.version = 25$"
             zkServer.sh version 2>/dev/null | tee /dev/stderr | grep -q "${ZK_VERSION}"
             test -s /opt/libs/zu.jar
+            set +e
+            zu_output="$(java -jar /opt/libs/zu.jar 2>&1)"
+            zu_status=$?
+            set -e
+            printf "%s\n" "$zu_output"
+            test "$zu_status" -eq 1
+            [[ "$zu_output" == "Usage: zu "* ]]
             for s in zookeeperStart.sh zookeeperReady.sh zookeeperLive.sh zookeeperTeardown.sh zookeeperMetrics.sh; do
               test -x "/usr/local/bin/${s}"
             done

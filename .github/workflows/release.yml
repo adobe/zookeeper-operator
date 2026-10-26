@@ -119,8 +119,8 @@ jobs:
             type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache-${{ needs.prepare.outputs.tag }}
             type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache
           labels: |
-            org.opencontainers.image.description=Apache Zookeeper ${{ needs.prepare.outputs.zk_version }} with OpenJDK 21
-      # Rebuilt on every release, so it also picks up the latest JDK 21 patch
+            org.opencontainers.image.description=Apache Zookeeper ${{ needs.prepare.outputs.zk_version }} with OpenJDK 25
+      # Rebuilt on every release, so it also picks up the latest JDK 25 patch
       # release and Debian security updates.
       - name: Build and push zookeeper Apache image
         id: build-zk-apache
@@ -153,7 +153,7 @@ jobs:
           tags: |
             type=raw,value=${{ needs.prepare.outputs.zk_version }}-${{ needs.prepare.outputs.tag }}
           labels: |
-            org.opencontainers.image.description=Apache Zookeeper image build with java-21
+            org.opencontainers.image.description=Apache Zookeeper image build with java-25
       - name: Build and push zookeeper image
         id: build-zk
         uses: docker/build-push-action@v7
