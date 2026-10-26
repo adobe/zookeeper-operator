@@ -85,7 +85,7 @@ class UpdateDepsTest(unittest.TestCase):
         for name in (*FILES, "update-go-deps.sh"):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / name, target)
+            shutil.copy2(ROOT / name, target)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         for name in ("go", "gh", "docker", "make", "curl"):
@@ -95,7 +95,7 @@ class UpdateDepsTest(unittest.TestCase):
 
     def run_updater(self, **env):
         return subprocess.run(
-            ["bash", "update-go-deps.sh"],
+            ["bash", "-e", "-c", "./update-go-deps.sh"],
             cwd=self.root,
             env={**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", **env},
             text=True,
