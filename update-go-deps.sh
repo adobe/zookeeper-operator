@@ -4,12 +4,14 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-for command in go gh docker python3 make; do
+for command in go gh docker python3 make curl; do
     command -v "$command" >/dev/null || {
         echo "Required command not found: $command" >&2
         exit 1
     }
 done
+
+export GOTOOLCHAIN=auto
 
 # Resolve and validate every build pin before writing any build configuration.
 python3 - <<'PY'
@@ -51,6 +53,23 @@ def update_pin(filename, pattern, value):
         sys.exit(f"Expected one build pin in {filename} for {pattern!r}, found {count}")
     files[filename] = text
 
+
+go_release = output("curl", "--fail", "--silent", "--show-error",
+                    "https://go.dev/VERSION?m=text").partition("\n")[0]
+match = re.fullmatch(r"go([0-9]+\.[0-9]+\.[0-9]+)", go_release)
+if not match:
+    sys.exit(f"Expected a stable Go release, got {go_release!r}")
+go_version = match[1]
+current_go = re.findall(r"^go ([0-9]+\.[0-9]+(?:\.[0-9]+)?)$",
+                        Path("go.mod").read_text(), re.MULTILINE)
+if len(current_go) != 1:
+    sys.exit("Expected one Go version directive in go.mod")
+if tuple(map(int, go_version.split("."))) < tuple(map(int, current_go[0].split("."))):
+    sys.exit(f"Refusing to downgrade Go from {current_go[0]} to {go_version}")
+update_pin("go.mod", r"^(go )[0-9.]+$", go_version)
+update_pin("Dockerfile", r"^(ARG GO_VERSION=)[0-9.]+$",
+           ".".join(go_version.split(".")[:2]))
+print(f"Go: {go_version}", flush=True)
 
 for variable, module in (
     ("KUSTOMIZE_VERSION", "sigs.k8s.io/kustomize/kustomize/v5"),

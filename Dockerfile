@@ -2,7 +2,7 @@
 # from the `go` directive in go.mod) so the builder image always matches the
 # toolchain version the module actually requires. The default below is only a
 # fallback for ad-hoc `docker build .` invocations without --build-arg.
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27
 FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:${GO_VERSION}-alpine3.24 AS go-builder
 
 # Populated automatically by BuildKit with the target platform of each build.

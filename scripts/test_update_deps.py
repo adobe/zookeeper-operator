@@ -8,6 +8,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
+    "go.mod",
+    "Dockerfile",
     "Makefile",
     ".github/workflows/ci.yaml",
     ".github/workflows/release.yml",
@@ -24,6 +26,8 @@ import sys
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 if tool == "go":
+    if os.environ.get("GOTOOLCHAIN") != "auto":
+        sys.exit("automatic Go toolchain selection is required")
     with open("go-commands.log", "a") as log:
         log.write(" ".join(args) + "\\n")
     if args == ["build", "./..."] and os.environ.get("FAIL_GO_BUILD"):
@@ -47,7 +51,11 @@ if tool == "make":
     sys.exit(0)
 if os.environ.get("FAIL_TOOL") == tool:
     sys.exit("simulated lookup failure")
-if tool == "gh":
+if tool == "curl":
+    if args != ["--fail", "--silent", "--show-error", "https://go.dev/VERSION?m=text"]:
+        sys.exit("unexpected Go release lookup")
+    print(os.environ.get("GO_RELEASE", "go1.99.2\\ntime 2099-01-01T00:00:00Z"))
+elif tool == "gh":
     repo = args[-1].removeprefix("repos/").removesuffix("/releases/latest")
     versions = {
         "golangci/golangci-lint": "v2.99.0",
@@ -80,7 +88,7 @@ class UpdateDepsTest(unittest.TestCase):
             shutil.copyfile(ROOT / name, target)
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        for name in ("go", "gh", "docker", "make"):
+        for name in ("go", "gh", "docker", "make", "curl"):
             tool = self.bin / name
             tool.write_text(FAKE_TOOL)
             tool.chmod(0o755)
@@ -97,9 +105,9 @@ class UpdateDepsTest(unittest.TestCase):
     def snapshot(self):
         return {name: (self.root / name).read_text() for name in FILES}
 
-    def test_updates_tools_and_matching_image_digests(self):
+    def test_updates_go_tools_and_matching_image_digests(self):
         before = self.snapshot()
-        result = self.run_updater()
+        result = self.run_updater(GOTOOLCHAIN="local")
         self.assertEqual(result.returncode, 0, result.stderr)
         commands = (self.root / "go-commands.log").read_text().splitlines()
         self.assertEqual(commands[-6:], [
@@ -111,6 +119,8 @@ class UpdateDepsTest(unittest.TestCase):
             "make manifests generate",
         ])
         after = self.snapshot()
+        self.assertIn("\ngo 1.99.2\n", after["go.mod"])
+        self.assertIn("\nARG GO_VERSION=1.99\n", after["Dockerfile"])
         self.assertIn("KUSTOMIZE_VERSION ?= v5.99.0", after["Makefile"])
         self.assertIn("CONTROLLER_TOOLS_VERSION ?= v0.99.0", after["Makefile"])
         self.assertIn("version: v2.99.0", after[".github/workflows/ci.yaml"])
@@ -136,15 +146,46 @@ class UpdateDepsTest(unittest.TestCase):
     def test_failed_or_invalid_metadata_does_not_edit_build_pins(self):
         before = self.snapshot()
         for env in (
+            {"FAIL_TOOL": "curl"},
             {"FAIL_TOOL": "gh"},
             {"FAIL_TOOL": "docker"},
             {"RELEASE_TAG": ""},
             {"RELEASE_TAG": "v3.0.0-rc.1"},
             {"IMAGE_DIGEST": "not-a-digest"},
+            {"GO_RELEASE": ""},
+            {"GO_RELEASE": "go1.99rc1"},
+            {"GO_RELEASE": "go1.99"},
         ):
             with self.subTest(env=env):
+                for name, text in before.items():
+                    (self.root / name).write_text(text)
                 result = self.run_updater(**env)
                 self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(before, self.snapshot())
+
+    def test_go_version_is_not_downgraded(self):
+        path = self.root / "go.mod"
+        path.write_text("module example.org/test\n\ngo 1.100.0\n")
+        before = self.snapshot()
+        result = self.run_updater()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing to downgrade Go", result.stderr)
+        self.assertEqual(before, self.snapshot())
+
+    def test_missing_go_pins_fail_without_partial_updates(self):
+        original = self.snapshot()
+        for name, old, new in (
+            ("Dockerfile", "ARG GO_VERSION=", "ARG OTHER="),
+            ("go.mod", "\ngo ", "\nnot-go "),
+        ):
+            with self.subTest(name=name):
+                for filename, text in original.items():
+                    (self.root / filename).write_text(text)
+                (self.root / name).write_text(original[name].replace(old, new))
+                before = self.snapshot()
+                result = self.run_updater()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(name, result.stderr)
                 self.assertEqual(before, self.snapshot())
 
     def test_go_build_failure_is_not_reported_as_success(self):

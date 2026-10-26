@@ -382,14 +382,20 @@ The list of available commands are
 
 ### Update dependencies
 
-Run `./update-go-deps.sh` to update Go modules and build-tool pins in the Makefile
-and CI workflows: kustomize (within v5), controller-tools, golangci-lint, Helm,
-kubeconform and actionlint. CI image tags and digests are updated together;
+Run `./update-go-deps.sh` to update Go to the latest stable release, Go modules,
+and build-tool pins in the Makefile and CI workflows: kustomize (within v5),
+controller-tools, golangci-lint, Helm, kubeconform and actionlint.
+CI image tags and digests are updated together;
 Helm versions stay synchronized between CI and releases.
+The Go version in `go.mod` and the Dockerfile's major.minor fallback stay
+synchronized; CI and Makefile builds derive their Go version from `go.mod`.
+Go version downgrades are rejected.
 
-Requires Go, Make, Python 3.9+, authenticated GitHub CLI (`gh auth login`), and Docker
-CLI with Buildx. All build-tool lookups and pin matches must succeed before build
-configuration is written. Go module updates are then checked with `go build ./...`.
+Requires Go, Make, curl, Python 3.9+, authenticated GitHub CLI (`gh auth login`),
+and Docker CLI with Buildx. The script enables automatic Go toolchain downloads
+with `GOTOOLCHAIN=auto`. All Go/build-tool lookups and pin matches must succeed
+before build configuration is written. Go module updates are then checked with
+`go build ./...`.
 Finally, `make manifests generate` regenerates code, CRDs and the Helm chart CRD;
 generation failures stop the updater.
 Review the diff and run the relevant CI checks before committing: stable releases
