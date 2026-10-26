@@ -66,8 +66,6 @@ for repo, action, filenames in (
      (".github/workflows/ci.yaml",)),
     ("helm/helm", "azure/setup-helm",
      (".github/workflows/ci.yaml", ".github/workflows/release.yml")),
-    ("zizmorcore/zizmor", "zizmorcore/zizmor-action",
-     (".github/workflows/workflow-lint.yaml",)),
 ):
     version = latest_release(repo)
     for filename in filenames:

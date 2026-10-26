@@ -54,7 +54,6 @@ if tool == "gh":
         "helm/helm": "v4.99.0",
         "yannh/kubeconform": "v0.99.0",
         "rhysd/actionlint": "v1.99.0",
-        "zizmorcore/zizmor": "v1.99.0",
     }
     print(json.dumps({"tag_name": os.environ.get("RELEASE_TAG", versions[repo]),
                       "draft": False, "prerelease": False}))
@@ -125,7 +124,6 @@ class UpdateDepsTest(unittest.TestCase):
             "rhysd/actionlint:1.99.0@sha256:" + "a" * 64,
             after[".github/workflows/workflow-lint.yaml"],
         )
-        self.assertIn("version: v1.99.0", after[".github/workflows/workflow-lint.yaml"])
         # Action refs and all surrounding configuration must remain untouched.
         for name in FILES:
             old_lines = [line for line in before[name].splitlines() if "uses:" in line]

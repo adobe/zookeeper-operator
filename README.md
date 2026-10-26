@@ -384,7 +384,7 @@ The list of available commands are
 
 Run `./update-go-deps.sh` to update Go modules and build-tool pins in the Makefile
 and CI workflows: kustomize (within v5), controller-tools, golangci-lint, Helm,
-kubeconform, actionlint and zizmor. CI image tags and digests are updated together;
+kubeconform and actionlint. CI image tags and digests are updated together;
 Helm versions stay synchronized between CI and releases.
 
 Requires Go, Make, Python 3.9+, authenticated GitHub CLI (`gh auth login`), and Docker
@@ -396,7 +396,8 @@ Review the diff and run the relevant CI checks before committing: stable release
 can still introduce breaking changes.
 
 GitHub Actions references, general Docker images and Gradle dependencies remain
-managed by Dependabot. Java and ZooKeeper versions are not changed by this script.
+managed by Dependabot. Zizmor uses the default binary version selected by its
+action. Java and ZooKeeper versions are not changed by this script.
 Test the updater without network access or real dependency upgrades with
 `python3 -B -m unittest discover -s scripts -p 'test_update_deps.py'`.
 
