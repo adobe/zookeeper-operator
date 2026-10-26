@@ -407,6 +407,19 @@ action. Java and ZooKeeper versions are not changed by this script.
 Test the updater without network access or real dependency upgrades with
 `python3 -B -m unittest discover -s scripts -p 'test_update_deps.py'`.
 
+The `update-dependencies` workflow runs every Monday at 08:17 UTC and can also
+be started manually. It runs the updater and regression, formatting, license,
+vet, and unit checks before creating or updating one PR from
+`automation/update-dependencies`. No PR is created when nothing changes;
+merging remains manual.
+
+The workflow requires the repository secret `PAT`, with Contents, Pull requests,
+and Workflows read/write permissions for this repository. Workflow permission
+is needed because the updater changes CI version pins. The PAT is used only
+to publish the PR, allowing normal PR checks to run; release lookups use the
+read-only workflow token. Scheduled runs start after the workflow is merged
+into the default branch.
+
 ### Build the operator image
 
 Requirements:
