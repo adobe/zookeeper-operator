@@ -8,24 +8,24 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/local/openjdk-21
+ENV JAVA_HOME=/usr/local/openjdk-25
 ENV PATH=$JAVA_HOME/bin:$PATH
 
 # Default to UTF-8 file.encoding
 ENV LANG=C.UTF-8
-ENV JAVA_VERSION=21
+ENV JAVA_VERSION=25
 
 RUN set -eux; \
 	\
 	arch="$(dpkg --print-architecture)"; \
 	case "$arch" in \
 		'amd64') \
-			downloadUrl='https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz'; \
-			downloadSha256='https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz.sha256'; \
+			downloadUrl='https://download.oracle.com/java/25/latest/jdk-25_linux-x64_bin.tar.gz'; \
+			downloadSha256='https://download.oracle.com/java/25/latest/jdk-25_linux-x64_bin.tar.gz.sha256'; \
 			;; \
 		'arm64') \
-			downloadUrl='https://download.oracle.com/java/21/latest/jdk-21_linux-aarch64_bin.tar.gz'; \
-			downloadSha256='https://download.oracle.com/java/21/latest/jdk-21_linux-aarch64_bin.tar.gz.sha256'; \
+			downloadUrl='https://download.oracle.com/java/25/latest/jdk-25_linux-aarch64_bin.tar.gz'; \
+			downloadSha256='https://download.oracle.com/java/25/latest/jdk-25_linux-aarch64_bin.tar.gz.sha256'; \
 			;; \
 		*) echo >&2 "error: unsupported architecture: '$arch'"; exit 1 ;; \
 	esac; \
@@ -163,7 +163,7 @@ ENV PATH=$PATH:/$DISTRO_NAME/bin \
 
 # OCI standard labels
 LABEL org.opencontainers.image.title="Apache Zookeeper"
-LABEL org.opencontainers.image.description="Apache Zookeeper ${ZK_VERSION} with OpenJDK 21"
+LABEL org.opencontainers.image.description="Apache Zookeeper ${ZK_VERSION} with OpenJDK 25"
 LABEL org.opencontainers.image.source="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"
