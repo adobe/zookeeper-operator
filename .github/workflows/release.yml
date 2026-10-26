@@ -266,7 +266,7 @@ jobs:
           persist-credentials: false
       - uses: azure/setup-helm@v5
         with:
-          version: v3.22.0
+          version: v4.3.1
       - uses: sigstore/cosign-installer@v4.1.2
       - name: Log into GitHub Container Registry ${{ env.GHCR_REGISTRY }}
         uses: docker/login-action@v4

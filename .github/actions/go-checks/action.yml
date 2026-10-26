@@ -2,7 +2,7 @@
 # (GitHub releases), so both gate on exactly the same checks.
 # The calling job must check out the repository first.
 name: go-checks
-description: Gofmt/license checks, go vet, generated-code drift check and unit tests with coverage.
+description: Gofmt/license checks, go vet, generated-code drift check, build-tool regression tests and unit tests with coverage.
 
 runs:
   using: composite
@@ -13,6 +13,9 @@ runs:
     - name: Gofmt and license checks
       shell: bash
       run: make check
+    - name: Build-tool regression tests
+      shell: bash
+      run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
     - name: go vet
       shell: bash
       run: go vet ./...

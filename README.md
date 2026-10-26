@@ -30,6 +30,7 @@ The project is currently beta. While no breaking API changes are currently plann
       - [Manual uninstall](#manual-uninstall-1)
     - [The AdminServer](#the-adminserver)
   - [Development](#development)
+    - [Update dependencies](#update-dependencies)
     - [Build the operator image](#build-the-operator-image)
     - [Published Docker Images](#published-docker-images)
     - [Direct access to the cluster](#direct-access-to-the-cluster)
@@ -378,6 +379,46 @@ The list of available commands are
 ```
 
 ## Development
+
+### Update dependencies
+
+Run `./update-go-deps.sh` to update Go to the latest stable release, Go modules,
+and build-tool pins in the Makefile and CI workflows: kustomize (within v5),
+controller-tools, golangci-lint, Helm, kubeconform and actionlint.
+CI image tags and digests are updated together;
+Helm versions stay synchronized between CI and releases.
+The Go version in `go.mod` and the Dockerfile's major.minor fallback stay
+synchronized; CI and Makefile builds derive their Go version from `go.mod`.
+Go version downgrades are rejected.
+
+Requires Go, Make, curl, Python 3.9+, authenticated GitHub CLI (`gh auth login`),
+and Docker CLI with Buildx. The script enables automatic Go toolchain downloads
+with `GOTOOLCHAIN=auto`. All Go/build-tool lookups and pin matches must succeed
+before build configuration is written. Go module updates are then checked with
+`go build ./...`.
+Finally, `make manifests generate` regenerates code, CRDs and the Helm chart CRD;
+generation failures stop the updater.
+Review the diff and run the relevant CI checks before committing: stable releases
+can still introduce breaking changes.
+
+GitHub Actions references, general Docker images and Gradle dependencies remain
+managed by Dependabot. Zizmor uses the default binary version selected by its
+action. Java and ZooKeeper versions are not changed by this script.
+Test the updater without network access or real dependency upgrades with
+`python3 -B -m unittest discover -s scripts -p 'test_update_deps.py'`.
+
+The `update-dependencies` workflow runs every Monday at 08:17 UTC and can also
+be started manually. It runs the updater and regression, formatting, license,
+vet, and unit checks before creating or updating one PR from
+`automation/update-dependencies`. No PR is created when nothing changes;
+merging remains manual.
+
+The workflow requires the repository secret `PAT`, with Contents, Pull requests,
+and Workflows read/write permissions for this repository. Workflow permission
+is needed because the updater changes CI version pins. The PAT is used only
+to publish the PR, allowing normal PR checks to run; release lookups use the
+read-only workflow token. Scheduled runs start after the workflow is merged
+into the default branch.
 
 ### Build the operator image
 
