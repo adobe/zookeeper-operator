@@ -25,6 +25,9 @@ dependencies {
 
 tasks.withType<ShadowJar>() {
     archiveClassifier.set("")
+    filesMatching("META-INF/*.kotlin_module") {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
     manifest {
         attributes["Main-Class"] = "io.pravega.zookeeper.MainKt"
     }
