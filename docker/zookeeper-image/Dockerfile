@@ -129,12 +129,11 @@ RUN set -eux; \
         local success=; \
         local distUrl=; \
         for distUrl in \
-	        https://downloads.apache.org/ \
-            https://www-us.apache.org/dist/ \
-            https://www.apache.org/dist/ \
+            https://dlcdn.apache.org/ \
+            https://downloads.apache.org/ \
             https://archive.apache.org/dist/ \
         ; do \
-            if wget -q -O "$f" "$distUrl$distFile" && [ -s "$f" ]; then \
+            if wget --no-verbose --timeout=30 --tries=3 --retry-connrefused -O "$f" "$distUrl$distFile" && [ -s "$f" ]; then \
                 success=1; \
                 break; \
             fi; \
