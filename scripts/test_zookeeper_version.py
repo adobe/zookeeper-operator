@@ -10,6 +10,61 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class ZookeeperDownloadTest(unittest.TestCase):
+    def run_download(self, available_url, empty=False):
+        dockerfile = (ROOT / "docker/zookeeper-image/Dockerfile").read_text()
+        helper = "ddist() {" + dockerfile.split("ddist() {", 1)[1].split(
+            "    ddist ", 1
+        )[0]
+        helper = helper.replace("\\\n", "")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["sh", "-ec",
+                 'wget() {\n'
+                 '    while [ "$#" -gt 0 ]; do\n'
+                 '        case "$1" in\n'
+                 '            -O) shift; output="$1" ;;\n'
+                 '            https://*) url="$1" ;;\n'
+                 '        esac\n'
+                 '        shift\n'
+                 '    done\n'
+                 '    [ "$url" = "$AVAILABLE_URL" ] || return 4\n'
+                 '    : > "$output"\n'
+                 '    [ "$EMPTY" = 1 ] || printf artifact > "$output"\n'
+                 '}\n' + helper + '\nddist artifact.tgz zookeeper/release.tgz'],
+                cwd=directory,
+                env={**os.environ, "AVAILABLE_URL": available_url,
+                     "EMPTY": "1" if empty else "0"},
+                text=True, capture_output=True,
+            )
+            target = Path(directory) / "artifact.tgz"
+            content = target.read_text() if target.exists() else None
+        return result, content
+
+    def test_downloads_from_cdn_when_origin_is_unavailable(self):
+        result, content = self.run_download(
+            "https://dlcdn.apache.org/zookeeper/release.tgz"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(content, "artifact")
+
+    def test_falls_back_to_archive_for_older_releases(self):
+        result, content = self.run_download(
+            "https://archive.apache.org/dist/zookeeper/release.tgz"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(content, "artifact")
+
+    def test_fails_when_all_sources_are_unavailable_or_empty(self):
+        for empty in (False, True):
+            with self.subTest(empty=empty):
+                result, _ = self.run_download(
+                    "https://archive.apache.org/dist/zookeeper/release.tgz"
+                    if empty else "", empty=empty,
+                )
+                self.assertNotEqual(result.returncode, 0)
+
+
 class ZookeeperVersionTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
