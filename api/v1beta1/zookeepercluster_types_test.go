@@ -33,6 +33,52 @@ var _ = Describe("ZookeeperCluster Types", func() {
 		}
 	})
 
+	Context("Logging", func() {
+		It("should not persist unspecified logging settings or repeatedly default them", func() {
+			for _, logging := range []v1beta1.LoggingConfig{
+				{},
+				{Level: "WARN"},
+				{Format: "json"},
+				{Level: "DEBUG", Format: "json"},
+			} {
+				z.Spec.Logging = logging
+				z.WithDefaults()
+				Ω(z.Spec.Logging).To(Equal(logging))
+				Ω(z.WithDefaults()).To(BeFalse())
+			}
+		})
+
+		It("should accept supported levels and formats before defaulting", func() {
+			for _, level := range []string{"", "ALL", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF"} {
+				for _, format := range []string{"", "text", "json"} {
+					logging := v1beta1.LoggingConfig{Level: level, Format: format}
+					Ω(logging.Validate()).To(Succeed())
+				}
+			}
+		})
+
+		It("should reject unsupported logging values with the field name", func() {
+			logging := v1beta1.LoggingConfig{Level: "warn"}
+			Ω(logging.Validate()).To(MatchError(ContainSubstring("spec.logging.level")))
+			logging = v1beta1.LoggingConfig{Format: "xml"}
+			Ω(logging.Validate()).To(MatchError(ContainSubstring("spec.logging.format")))
+		})
+
+		It("should allow default logging on the old image but reject customized logging", func() {
+			z.Spec.Image.Tag = "3.8.4-0.2.15-adobe-20250923"
+			Ω(z.Spec.ValidateLogging()).To(Succeed())
+			z.Spec.Logging.Format = "json"
+			Ω(z.Spec.ValidateLogging()).To(MatchError(ContainSubstring("upgrade")))
+			z.Spec.Logging = v1beta1.LoggingConfig{Level: "WARN"}
+			Ω(z.Spec.ValidateLogging()).To(MatchError(ContainSubstring("upgrade")))
+			z.Spec.Image.Repository = "example.com/custom-zookeeper"
+			Ω(z.Spec.ValidateLogging()).To(Succeed())
+			z.Spec.Image.Repository = v1beta1.DefaultZkContainerRepository
+			z.Spec.Image.Tag = v1beta1.DefaultZkContainerVersion
+			Ω(z.Spec.ValidateLogging()).To(Succeed())
+		})
+	})
+
 	Context("#WithDefaults", func() {
 		var changed bool
 		BeforeEach(func() {

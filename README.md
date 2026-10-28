@@ -18,6 +18,7 @@ The project is currently beta. While no breaking API changes are currently plann
       - [Manual deployment](#manual-deployment)
     - [Deploy a sample Zookeeper cluster](#deploy-a-sample-zookeeper-cluster)
       - [Manual deployment](#manual-deployment-1)
+    - [Configure ZooKeeper logging](#configure-zookeeper-logging)
     - [Deploy a sample Zookeeper cluster with Ephemeral storage](#deploy-a-sample-zookeeper-cluster-with-ephemeral-storage)
     - [Deploy a sample Zookeeper cluster with Istio](#deploy-a-sample-zookeeper-cluster-with-istio)
     - [Upgrade a Zookeeper cluster](#upgrade-a-zookeeper-cluster)
@@ -185,6 +186,77 @@ spec:
         limits:
           cpu: 200m
           memory: 256Mi
+```
+
+### Configure ZooKeeper logging
+
+Configure ZooKeeper server logging through `spec.logging`. Omitted settings preserve
+the existing INFO threshold and text format.
+
+| Field | Values | Default |
+|---|---|---|
+| `spec.logging.level` | `ALL`, `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `OFF` | `INFO` |
+| `spec.logging.format` | `text`, `json` | `text` |
+
+Values are case-sensitive. The level applies to the root logger, the console
+threshold, and the `org.apache.zookeeper` and `org.eclipse.jetty` loggers. For
+example, WARN suppresses INFO messages from `ruok` health probes:
+
+```yaml
+spec:
+  logging:
+    level: WARN
+    format: text
+```
+
+For JSON Lines output, use:
+
+```yaml
+spec:
+  logging:
+    level: INFO
+    format: json
+```
+
+The default image is
+`ghcr.io/adobe/zookeeper-operator/zookeeper:3.9.6-0.2.15-adobe-20260924`.
+It contains ZooKeeper 3.9.6 and Logback 1.3.15 with the built-in JSON encoder.
+Existing clusters keep their explicitly stored image tags. The previous default,
+`3.8.4-0.2.15-adobe-20250923`, cannot apply logging changes; upgrade it before
+changing `spec.logging`. The operator rejects customized logging for that image
+without rolling its pods. Other older or custom images must support copying the
+operator-generated Logback files; JSON also requires
+`ch.qos.logback.classic.encoder.JsonEncoder` and is not guaranteed for ZooKeeper
+3.8 images.
+Startup scripts, helper processes and JVM diagnostics can still emit plain text.
+
+Changing effective logging settings automatically triggers a StatefulSet rolling
+update. The operator updates the ConfigMap first and manages the
+`zookeeper.pravega.io/logback-hash` and `zookeeper.pravega.io/logback-config`
+pod-template annotations; do not set these keys manually. For new clusters and
+existing clusters after a logging change, the Logback file is projected from
+each pod's template, so delayed ConfigMap updates cannot make a restarted pod
+use another logging revision. During the first logging rollout on an existing
+unprojected cluster, an old pod that restarts before replacement can pick up
+the new ConfigMap contents early. There is no separate
+`triggerRollingRestart` step. Reapplying unchanged settings does not cause another
+rollout. The hash annotation is absent for INFO/text
+defaults, so enabling this feature does not restart unchanged default clusters.
+Returning customized logging to INFO/text removes the annotation and rolls pods
+back to default logging.
+
+**Rolling updates can reconnect clients and cause leader elections. A single-node
+cluster has downtime during its restart.** Logging is not live-reloaded: the
+existing writable `/data/conf/logback.xml` copy and startup behavior are preserved.
+The quiet Logback configuration, legacy Log4j configurations and custom JVM
+arguments are unchanged. Explicit JVM overrides selecting another Logback file
+continue to take precedence over the generated configuration.
+
+Upgrade the CRD before using these fields, including Helm installations that
+manage CRDs separately from the chart:
+
+```bash
+kubectl apply --server-side -f config/crd/bases/zookeeper.pravega.io_zookeeperclusters.yaml
 ```
 
 ### Deploy a sample Zookeeper cluster with Ephemeral storage

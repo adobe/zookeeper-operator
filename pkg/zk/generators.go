@@ -11,6 +11,7 @@
 package zk
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -26,8 +27,10 @@ import (
 )
 
 const (
-	externalDNSAnnotationKey = "external-dns.alpha.kubernetes.io/hostname"
-	dot                      = "."
+	externalDNSAnnotationKey   = "external-dns.alpha.kubernetes.io/hostname"
+	logbackHashAnnotationKey   = "zookeeper.pravega.io/logback-hash"
+	logbackConfigAnnotationKey = "zookeeper.pravega.io/logback-config"
+	dot                        = "."
 )
 
 func headlessDomain(z *v1beta1.ZookeeperCluster) string {
@@ -42,6 +45,24 @@ var zkDataVolume = "data"
 
 // MakeStatefulSet return a zookeeper stateful set from the zk spec
 func MakeStatefulSet(z *v1beta1.ZookeeperCluster) *appsv1.StatefulSet {
+	annotations := z.Spec.Pod.Annotations
+	logging := z.Spec.Logging.Effective()
+	if logging.Level != "INFO" || logging.Format != "text" {
+		annotations = copyMap(annotations)
+		config := makeZkLogbackConfigString(z)
+		digest := sha256.Sum256([]byte(config))
+		annotations[logbackHashAnnotationKey] = fmt.Sprintf("%x", digest)
+		annotations[logbackConfigAnnotationKey] = config
+	} else {
+		_, hasHash := annotations[logbackHashAnnotationKey]
+		_, hasConfig := annotations[logbackConfigAnnotationKey]
+		if hasHash || hasConfig {
+			annotations = copyMap(annotations)
+			delete(annotations, logbackHashAnnotationKey)
+			delete(annotations, logbackConfigAnnotationKey)
+		}
+	}
+
 	extraVolumes := []v1.Volume{}
 	persistence := z.Spec.Persistence
 	pvcs := []v1.PersistentVolumeClaim{}
@@ -98,7 +119,7 @@ func MakeStatefulSet(z *v1beta1.ZookeeperCluster) *appsv1.StatefulSet {
 							"kind": "ZookeeperMember",
 						},
 					),
-					Annotations: z.Spec.Pod.Annotations,
+					Annotations: annotations,
 				},
 				Spec: makeZkPodSpec(z, extraVolumes),
 			},
@@ -160,7 +181,7 @@ func makeZkPodSpec(z *v1beta1.ZookeeperCluster, volumes []v1.Volume) v1.PodSpec 
 	if z.Spec.Pod.Resources.Limits != nil || z.Spec.Pod.Resources.Requests != nil {
 		zkContainer.Resources = z.Spec.Pod.Resources
 	}
-	volumes = append(volumes, v1.Volume{
+	confVolume := v1.Volume{
 		Name: "conf",
 		VolumeSource: v1.VolumeSource{
 			ConfigMap: &v1.ConfigMapVolumeSource{
@@ -169,7 +190,12 @@ func makeZkPodSpec(z *v1beta1.ZookeeperCluster, volumes []v1.Volume) v1.PodSpec 
 				},
 			},
 		},
-	})
+	}
+	logging := z.Spec.Logging.Effective()
+	if logging.Level != "INFO" || logging.Format != "text" {
+		confVolume = makeLogbackProjectedVolume(z)
+	}
+	volumes = append(volumes, confVolume)
 
 	zkContainer.Env = append(zkContainer.Env, z.Spec.Pod.Env...)
 	podSpec := v1.PodSpec{
@@ -190,6 +216,59 @@ func makeZkPodSpec(z *v1beta1.ZookeeperCluster, volumes []v1.Volume) v1.PodSpec 
 	}
 
 	return podSpec
+}
+
+func makeLogbackProjectedVolume(z *v1beta1.ZookeeperCluster) v1.Volume {
+	return v1.Volume{
+		Name: "conf",
+		VolumeSource: v1.VolumeSource{
+			Projected: &v1.ProjectedVolumeSource{
+				Sources: []v1.VolumeProjection{
+					{ConfigMap: &v1.ConfigMapProjection{
+						LocalObjectReference: v1.LocalObjectReference{Name: z.ConfigMapName()},
+						Items: []v1.KeyToPath{
+							{Key: "zoo.cfg", Path: "zoo.cfg"},
+							{Key: "log4j.properties", Path: "log4j.properties"},
+							{Key: "log4j-quiet.properties", Path: "log4j-quiet.properties"},
+							{Key: "logback-quiet.xml", Path: "logback-quiet.xml"},
+							{Key: "env.sh", Path: "env.sh"},
+						},
+					}},
+					{DownwardAPI: &v1.DownwardAPIProjection{
+						Items: []v1.DownwardAPIVolumeFile{{
+							Path: "logback.xml",
+							FieldRef: &v1.ObjectFieldSelector{
+								FieldPath: "metadata.annotations['" + logbackConfigAnnotationKey + "']",
+							},
+						}},
+					}},
+				},
+			},
+		},
+	}
+}
+
+// EnsureLogbackProjection protects new StatefulSets and logging rollbacks.
+func EnsureLogbackProjection(z *v1beta1.ZookeeperCluster, current, desired *appsv1.StatefulSet) {
+	if _, exists := desired.Spec.Template.Annotations[logbackConfigAnnotationKey]; exists {
+		return
+	}
+	if current != nil {
+		_, hadHash := current.Spec.Template.Annotations[logbackHashAnnotationKey]
+		_, hadConfig := current.Spec.Template.Annotations[logbackConfigAnnotationKey]
+		if !hadHash && !hadConfig {
+			// shortcut: unprojected pods may pick up changes early; migrate them first for strict revision isolation.
+			return
+		}
+	}
+	desired.Spec.Template.Annotations = copyMap(desired.Spec.Template.Annotations)
+	desired.Spec.Template.Annotations[logbackConfigAnnotationKey] = makeZkLogbackConfigString(z)
+	for i := range desired.Spec.Template.Spec.Volumes {
+		if desired.Spec.Template.Spec.Volumes[i].Name == "conf" {
+			desired.Spec.Template.Spec.Volumes[i] = makeLogbackProjectedVolume(z)
+			return
+		}
+	}
 }
 
 // MakeClientService returns a client service resource for the zookeeper cluster
@@ -229,7 +308,7 @@ func MakeConfigMap(z *v1beta1.ZookeeperCluster) *v1.ConfigMap {
 			"zoo.cfg":                makeZkConfigString(z),
 			"log4j.properties":       makeZkLog4JConfigString(),
 			"log4j-quiet.properties": makeZkLog4JQuietConfigString(),
-			"logback.xml":            makeZkLogbackConfigString(),
+			"logback.xml":            makeZkLogbackConfigString(z),
 			"logback-quiet.xml":      makeZkLogbackQuietConfigString(),
 			"env.sh":                 makeZkEnvConfigString(z),
 		},
@@ -302,26 +381,29 @@ func makeZkLog4JConfigString() string {
 		"log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n\n"
 }
 
-// makeZkLogbackConfigString returns logback.xml with root and key loggers at INFO
-// so that ZooKeeper (which uses Logback at runtime) does not emit DEBUG.
-func makeZkLogbackConfigString() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
+func makeZkLogbackConfigString(z *v1beta1.ZookeeperCluster) string {
+	logging := z.Spec.Logging.Effective()
+	encoder := `    <encoder>
+      <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
+    </encoder>`
+	if logging.Format == "json" {
+		encoder = `    <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>`
+	}
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
   <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder>
-      <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
-    </encoder>
+%[2]s
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-      <level>INFO</level>
+      <level>%[1]s</level>
     </filter>
   </appender>
-  <logger name="org.apache.zookeeper" level="INFO"/>
-  <logger name="org.eclipse.jetty" level="INFO"/>
-  <root level="INFO">
+  <logger name="org.apache.zookeeper" level="%[1]s"/>
+  <logger name="org.eclipse.jetty" level="%[1]s"/>
+  <root level="%[1]s">
     <appender-ref ref="CONSOLE" />
   </root>
 </configuration>
-`
+`, logging.Level, encoder)
 }
 
 // makeZkLogbackQuietConfigString sends ERROR logs to stderr to preserve client command stdout.
