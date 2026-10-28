@@ -61,7 +61,8 @@ jobs:
         env:
           IMAGE: ${{ steps.kind.outputs.LOCAL_REGISTRY }}/zookeeper:e2e
         run: |
-          docker build -t zookeeper-apache:e2e docker/zookeeper-image
+          zk_version="$(./scripts/zookeeper-version.sh)"
+          docker build --build-arg ZK_VERSION="$zk_version" -t zookeeper-apache:e2e docker/zookeeper-image
           docker build --build-arg BASE_IMAGE=zookeeper-apache:e2e -t "$IMAGE" docker
           docker push "$IMAGE"
       - name: Deploy operator

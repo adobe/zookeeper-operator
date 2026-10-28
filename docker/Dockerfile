@@ -12,7 +12,7 @@
 # Base Apache ZooKeeper + OpenJDK 25 image built from docker/zookeeper-image.
 # It is not pinned here: the build-zookeeper release job builds that image
 # first and passes its digest in, so both always come from the same commit
-# and ARG ZK_VERSION. For local builds use `make build-zk-image`.
+# and shared zookeeperVersion. For local builds use `make build-zk-image`.
 ARG BASE_IMAGE
 
 # zu.jar is architecture-independent bytecode, so build it once on the native

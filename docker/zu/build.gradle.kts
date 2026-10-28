@@ -16,9 +16,11 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
+val zookeeperVersion = "3.9.6"
+
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("org.apache.zookeeper:zookeeper:3.9.6")
+    implementation("org.apache.zookeeper:zookeeper:$zookeeperVersion")
 }
 
 tasks.withType<ShadowJar>() {

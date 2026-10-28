@@ -52,12 +52,8 @@ updates:
         patterns:
           - "*"
 
-  # The Apache ZooKeeper server version itself is managed manually. It is the
-  # tarball downloaded by ARG ZK_VERSION in docker/zookeeper-image/Dockerfile,
-  # which Dependabot cannot see. To bump it: update ARG ZK_VERSION, publish a
-  # GitHub release (the release job rebuilds the base image and the final
-  # zookeeper image together), then update DefaultZkContainerVersion.
-  # Only the debian base image is automated here.
+  # The ZooKeeper server version comes from the Gradle variable below.
+  # This entry updates only the Debian base image.
   - package-ecosystem: "docker"
     directory: "/docker/zookeeper-image"
     schedule:
@@ -70,14 +66,13 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    ignore:
-      - dependency-name: "*zookeeper*"
     groups:
       zookeeper-image-dependencies:
         patterns:
           - "*"
 
-  # Gradle dependencies for the "zu" helper tool (grouped into single PR)
+  # Gradle dependencies for the "zu" helper tool. The ZooKeeper dependency
+  # uses zookeeperVersion in build.gradle.kts, shared with server-image builds.
   - package-ecosystem: "gradle"
     directory: "/docker/zu"
     schedule:
@@ -90,13 +85,15 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    ignore:
-      # See the note above: the ZooKeeper version is managed manually.
-      - dependency-name: "org.apache.zookeeper:*"
     groups:
+      zookeeper:
+        patterns:
+          - "org.apache.zookeeper:*"
       gradle-dependencies:
         patterns:
           - "*"
+        exclude-patterns:
+          - "org.apache.zookeeper:*"
 
 
   # =============================================================================

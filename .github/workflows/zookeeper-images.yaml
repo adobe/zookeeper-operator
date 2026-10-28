@@ -8,12 +8,14 @@ on:
   pull_request:
     paths:
       - 'docker/**'
+      - 'scripts/zookeeper-version.sh'
       - '.github/workflows/zookeeper-images.yaml'
   push:
     branches:
       - master
     paths:
       - 'docker/**'
+      - 'scripts/zookeeper-version.sh'
       - '.github/workflows/zookeeper-images.yaml'
   workflow_dispatch:
 
@@ -46,11 +48,7 @@ jobs:
       - name: Resolve ZooKeeper version
         id: zk
         run: |
-          zk_version="$(sed -n 's/^ARG ZK_VERSION=//p' docker/zookeeper-image/Dockerfile)"
-          if [ -z "$zk_version" ]; then
-            echo "::error::Could not read ARG ZK_VERSION from docker/zookeeper-image/Dockerfile"
-            exit 1
-          fi
+          zk_version="$(./scripts/zookeeper-version.sh)"
           echo "zk_version=${zk_version}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
@@ -60,6 +58,8 @@ jobs:
         with:
           context: docker/zookeeper-image
           platforms: linux/${{ matrix.arch }}
+          build-args: |
+            ZK_VERSION=${{ steps.zk.outputs.zk_version }}
           outputs: type=oci,dest=${{ runner.temp }}/zookeeper-apache,tar=false
           cache-from: type=gha,scope=zookeeper-apache-${{ matrix.arch }}
           cache-to: ${{ github.event_name == 'push' && format('type=gha,mode=max,scope=zookeeper-apache-{0}', matrix.arch) || '' }}
