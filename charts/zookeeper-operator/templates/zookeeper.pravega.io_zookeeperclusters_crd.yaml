@@ -3470,6 +3470,29 @@ spec:
                   creates for the zookeeper cluster, including StatefulSet, Pod,
                   PersistentVolumeClaim, Service, ConfigMap, et al.
                 type: object
+              logging:
+                description: Logging configures ZooKeeper server logs. Changes trigger
+                  a rolling update.
+                properties:
+                  format:
+                    description: Format is text or json. Defaults to text. JSON requires
+                      a compatible Logback image.
+                    enum:
+                    - text
+                    - json
+                    type: string
+                  level:
+                    description: Level is the logging threshold. Defaults to INFO.
+                    enum:
+                    - ALL
+                    - TRACE
+                    - DEBUG
+                    - INFO
+                    - WARN
+                    - ERROR
+                    - "OFF"
+                    type: string
+                type: object
               maxUnavailableReplicas:
                 description: |-
                   MaxUnavailableReplicas defines the

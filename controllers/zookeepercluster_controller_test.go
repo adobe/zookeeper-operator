@@ -12,10 +12,13 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ghodss/yaml"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -24,10 +27,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pravega/zookeeper-operator/api/v1beta1"
 	"github.com/pravega/zookeeper-operator/pkg/controller/config"
+	"github.com/pravega/zookeeper-operator/pkg/utils"
 	"github.com/pravega/zookeeper-operator/pkg/zk"
 
 	. "github.com/onsi/ginkgo"
@@ -37,6 +42,53 @@ import (
 func TestZookeepercluster(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "ZookeeperCluster Controller Spec")
+}
+
+func TestGenerateYAMLRejectsInvalidLogging(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, tc := range []struct {
+		logging v1beta1.LoggingConfig
+		field   string
+	}{
+		{v1beta1.LoggingConfig{Level: "invalid"}, "spec.logging.level"},
+		{v1beta1.LoggingConfig{Format: "invalid"}, "spec.logging.format"},
+	} {
+		z := &v1beta1.ZookeeperCluster{}
+		z.Spec.Logging = tc.logging
+		r := &ZookeeperClusterReconciler{}
+		if err := r.GenerateYAML(z); err == nil || !strings.Contains(err.Error(), tc.field) {
+			t.Fatalf("expected validation error for %s, got %v", tc.field, err)
+		}
+	}
+	files, err := os.ReadDir(".")
+	if err != nil || len(files) != 0 {
+		t.Fatalf("invalid logging created output files: %v, error: %v", files, err)
+	}
+}
+
+func TestGenerateYAMLProjectsDefaultLogging(t *testing.T) {
+	t.Chdir(t.TempDir())
+	z := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{Name: "example"}}
+	if err := (&ZookeeperClusterReconciler{}).GenerateYAML(z); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("ZookeeperCluster/StatefulSet.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sts appsv1.StatefulSet
+	if err := yaml.Unmarshal(data, &sts); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-config"], `<root level="INFO">`) {
+		t.Fatal("exported StatefulSet does not contain its default Logback config")
+	}
+	for _, volume := range sts.Spec.Template.Spec.Volumes {
+		if volume.Name == "conf" && volume.Projected != nil {
+			return
+		}
+	}
+	t.Fatal("exported StatefulSet does not project the default Logback config")
 }
 
 type MockZookeeperClient struct {
@@ -97,6 +149,176 @@ var _ = Describe("ZookeeperCluster Controller", func() {
 				},
 			}
 			s.AddKnownTypes(v1beta1.GroupVersion, z)
+		})
+
+		Context("Logging", func() {
+			var cl client.WithWatch
+
+			BeforeEach(func() {
+				z.WithDefaults()
+				z.Status.Init()
+				z.Spec.Pod.Annotations = map[string]string{"custom": "keep"}
+				cl = fake.NewClientBuilder().WithScheme(s).
+					WithRuntimeObjects(z, zk.MakeConfigMap(z), zk.MakeStatefulSet(z)).
+					WithStatusSubresource(z).Build()
+				r = &ZookeeperClusterReconciler{Client: cl, Scheme: s, ZkClient: mockZkClient}
+			})
+
+			It("should not roll an existing StatefulSet with unchanged default logging", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				original := sts.Spec.Template.DeepCopy()
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).NotTo(HaveOccurred())
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template).To(Equal(*original))
+			})
+
+			It("should apply logging updates and repairs without repeated template changes", func() {
+				for _, logging := range []v1beta1.LoggingConfig{
+					{Level: "WARN", Format: "text"},
+					{Level: "WARN", Format: "json"},
+					{Level: "INFO", Format: "text"},
+				} {
+					Ω(cl.Get(context.TODO(), req.NamespacedName, z)).To(Succeed())
+					z.Spec.Logging = logging
+					Ω(cl.Update(context.TODO(), z)).To(Succeed())
+					_, err := r.Reconcile(context.TODO(), req)
+					Ω(err).NotTo(HaveOccurred())
+					cm := &corev1.ConfigMap{}
+					cmKey := types.NamespacedName{Name: z.ConfigMapName(), Namespace: Namespace}
+					Ω(cl.Get(context.TODO(), cmKey, cm)).To(Succeed())
+					Ω(cm.Data["logback.xml"]).To(ContainSubstring(`<root level="` + logging.Level + `">`))
+					sts := &appsv1.StatefulSet{}
+					Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+					Ω(sts.Spec.Template.Annotations).To(HaveKeyWithValue("custom", "keep"))
+					Ω(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-config"]).To(Equal(cm.Data["logback.xml"]))
+					var conf corev1.Volume
+					for _, volume := range sts.Spec.Template.Spec.Volumes {
+						if volume.Name == "conf" {
+							conf = volume
+						}
+					}
+					Ω(conf.Projected).NotTo(BeNil())
+					if logging.Level == "INFO" && logging.Format == "text" {
+						Ω(sts.Spec.Template.Annotations).NotTo(HaveKey("zookeeper.pravega.io/logback-hash"))
+					} else {
+						Ω(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-hash"]).NotTo(BeEmpty())
+					}
+					template := sts.Spec.Template.DeepCopy()
+					expectedLogback := cm.Data["logback.xml"]
+					cm.Data["logback.xml"] = "manual edit"
+					Ω(cl.Update(context.TODO(), cm)).To(Succeed())
+					_, err = r.Reconcile(context.TODO(), req)
+					Ω(err).NotTo(HaveOccurred())
+					Ω(cl.Get(context.TODO(), cmKey, cm)).To(Succeed())
+					Ω(cm.Data["logback.xml"]).To(Equal(expectedLogback))
+					Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+					Ω(sts.Spec.Template).To(Equal(*template))
+					Ω(cl.Get(context.TODO(), req.NamespacedName, z)).To(Succeed())
+					Ω(z.Spec.TriggerRollingRestart).To(BeFalse())
+					Ω(z.Spec.Pod.Annotations).To(Equal(map[string]string{"custom": "keep"}))
+				}
+			})
+
+			It("should not update the pod template when the ConfigMap update fails", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				original := sts.Spec.Template.DeepCopy()
+				z.Spec.Logging.Level = "WARN"
+				Ω(cl.Update(context.TODO(), z)).To(Succeed())
+				r.Client = interceptor.NewClient(cl, interceptor.Funcs{
+					Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+						if _, ok := obj.(*corev1.ConfigMap); ok {
+							return errors.New("config update failed")
+						}
+						return c.Update(ctx, obj, opts...)
+					},
+				})
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).To(MatchError("config update failed"))
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template).To(Equal(*original))
+			})
+
+			It("should reject invalid logging before changing managed resources", func() {
+				z.Spec.Logging.Level = "invalid"
+				Ω(cl.Update(context.TODO(), z)).To(Succeed())
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).To(MatchError(ContainSubstring("spec.logging.level")))
+			})
+
+			It("should reject logging changes for the previous default image before rolling pods", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				original := sts.Spec.Template.DeepCopy()
+				z.Spec.Image.Tag = "3.8.4-0.2.15-adobe-20250923"
+				z.Spec.Logging.Level = "WARN"
+				Ω(cl.Update(context.TODO(), z)).To(Succeed())
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).To(MatchError(ContainSubstring("upgrade")))
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template).To(Equal(*original))
+			})
+
+			It("should validate fresh logging settings when the informer has an old CRD schema", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				original := sts.Spec.Template.DeepCopy()
+				z.Spec.Image.Tag = "3.8.4-0.2.15-adobe-20250923"
+				Ω(cl.Update(context.TODO(), z)).To(Succeed())
+				fresh := z.DeepCopy()
+				fresh.Spec.Logging.Level = "WARN"
+				r.APIReader = fake.NewClientBuilder().WithScheme(s).WithObjects(fresh).Build()
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).To(MatchError(ContainSubstring("upgrade")))
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template).To(Equal(*original))
+			})
+
+			It("should finalize a cluster with incompatible logging when it is deleted", func() {
+				z.Spec.Image.Tag = "3.8.4-0.2.15-adobe-20250923"
+				z.Spec.Logging.Level = "WARN"
+				z.Spec.Persistence.VolumeReclaimPolicy = v1beta1.VolumeReclaimPolicyDelete
+				z.Finalizers = []string{utils.ZkFinalizer}
+				Ω(cl.Update(context.TODO(), z)).To(Succeed())
+				Ω(cl.Delete(context.TODO(), z)).To(Succeed())
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).NotTo(HaveOccurred())
+				Ω(cl.Get(context.TODO(), req.NamespacedName, &v1beta1.ZookeeperCluster{})).NotTo(Succeed())
+			})
+
+			It("should project default logging when reverting an older customized StatefulSet", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-hash"] = "previous"
+				Ω(cl.Update(context.TODO(), sts)).To(Succeed())
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).NotTo(HaveOccurred())
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-config"]).To(ContainSubstring(`<root level="INFO">`))
+				for _, volume := range sts.Spec.Template.Spec.Volumes {
+					if volume.Name == "conf" {
+						Ω(volume.Projected).NotTo(BeNil())
+					}
+				}
+			})
+
+			It("should project logging when recreating a missing StatefulSet", func() {
+				sts := &appsv1.StatefulSet{}
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(cl.Delete(context.TODO(), sts)).To(Succeed())
+
+				_, err := r.Reconcile(context.TODO(), req)
+				Ω(err).NotTo(HaveOccurred())
+				Ω(cl.Get(context.TODO(), req.NamespacedName, sts)).To(Succeed())
+				Ω(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-config"]).To(ContainSubstring(`<root level="INFO">`))
+			})
 		})
 
 		Context("Before defaults are applied", func() {

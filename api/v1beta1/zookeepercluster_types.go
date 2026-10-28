@@ -26,7 +26,7 @@ const (
 
 	// DefaultZkContainerVersion is the default tag used for for the zookeeper
 	// container
-	DefaultZkContainerVersion = "3.8.4-0.2.15-adobe-20250923"
+	DefaultZkContainerVersion = "3.9.6-0.2.15-adobe-20260924"
 
 	// DefaultZkContainerPolicy is the default container pull policy used
 	DefaultZkContainerPolicy = "Always"
@@ -135,6 +135,9 @@ type ZookeeperClusterSpec struct {
 	// default values will be provided, and optional values will be excluded.
 	Conf ZookeeperConfig `json:"config,omitempty"`
 
+	// Logging configures ZooKeeper server logs. Changes trigger a rolling update.
+	Logging LoggingConfig `json:"logging,omitempty"`
+
 	// External host name appended for dns annotation
 	DomainName string `json:"domainName,omitempty"`
 
@@ -169,6 +172,57 @@ type Probes struct {
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 	// +optional
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
+}
+
+// LoggingConfig configures the ZooKeeper server's Logback console output.
+type LoggingConfig struct {
+	// Level is the logging threshold. Defaults to INFO.
+	// +kubebuilder:validation:Enum=ALL;TRACE;DEBUG;INFO;WARN;ERROR;OFF
+	Level string `json:"level,omitempty"`
+
+	// Format is text or json. Defaults to text. JSON requires a compatible Logback image.
+	// +kubebuilder:validation:Enum=text;json
+	Format string `json:"format,omitempty"`
+}
+
+// Effective returns logging settings with defaults without changing the spec.
+func (c LoggingConfig) Effective() LoggingConfig {
+	if c.Level == "" {
+		c.Level = "INFO"
+	}
+	if c.Format == "" {
+		c.Format = "text"
+	}
+	return c
+}
+
+// Validate rejects unsupported logging settings, allowing unspecified defaults.
+func (c LoggingConfig) Validate() error {
+	switch c.Level {
+	case "", "ALL", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF":
+	default:
+		return fmt.Errorf("spec.logging.level %q must be one of ALL, TRACE, DEBUG, INFO, WARN, ERROR, OFF", c.Level)
+	}
+	switch c.Format {
+	case "", "text", "json":
+	default:
+		return fmt.Errorf("spec.logging.format %q must be text or json", c.Format)
+	}
+	return nil
+}
+
+// ValidateLogging checks logging settings and known incompatible images.
+func (s ZookeeperClusterSpec) ValidateLogging() error {
+	if err := s.Logging.Validate(); err != nil {
+		return err
+	}
+	logging := s.Logging.Effective()
+	if (s.Image.Repository == "" || s.Image.Repository == DefaultZkContainerRepository) &&
+		s.Image.Tag == "3.8.4-0.2.15-adobe-20250923" &&
+		(logging.Level != "INFO" || logging.Format != "text") {
+		return fmt.Errorf("spec.logging requires a compatible ZooKeeper image; upgrade the previous default image %q", s.Image.Tag)
+	}
+	return nil
 }
 
 func (s *ZookeeperClusterSpec) withDefaults(z *ZookeeperCluster) (changed bool) {

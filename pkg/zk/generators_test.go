@@ -11,6 +11,8 @@
 package zk_test
 
 import (
+	"crypto/sha256"
+	"encoding/xml"
 	"fmt"
 	"strings"
 
@@ -30,6 +32,160 @@ import (
 )
 
 var _ = Describe("Generators Spec", func() {
+
+	Context("Logging configuration", func() {
+		const hashAnnotation = "zookeeper.pravega.io/logback-hash"
+
+		It("should preserve the default Logback XML exactly", func() {
+			z := &v1beta1.ZookeeperCluster{}
+			z.WithDefaults()
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(Equal(`<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
+    </encoder>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+  </appender>
+  <logger name="org.apache.zookeeper" level="INFO"/>
+  <logger name="org.eclipse.jetty" level="INFO"/>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>
+`))
+		})
+
+		It("should render the requested thresholds and encoder as valid XML", func() {
+			for _, logging := range []v1beta1.LoggingConfig{
+				{Level: "WARN", Format: "text"},
+				{Level: "DEBUG", Format: "text"},
+				{Level: "INFO", Format: "json"},
+			} {
+				z := &v1beta1.ZookeeperCluster{}
+				z.Spec.Logging = logging
+				z.WithDefaults()
+				var cfg struct {
+					Appender struct {
+						Encoder struct {
+							Class   string `xml:"class,attr"`
+							Pattern string `xml:"pattern"`
+						} `xml:"encoder"`
+						Filter struct {
+							Level string `xml:"level"`
+						} `xml:"filter"`
+					} `xml:"appender"`
+					Loggers []struct {
+						Name  string `xml:"name,attr"`
+						Level string `xml:"level,attr"`
+					} `xml:"logger"`
+					Root struct {
+						Level string `xml:"level,attr"`
+					} `xml:"root"`
+				}
+				Ω(xml.Unmarshal([]byte(zk.MakeConfigMap(z).Data["logback.xml"]), &cfg)).To(Succeed())
+				Ω(cfg.Root.Level).To(Equal(logging.Level))
+				Ω(cfg.Appender.Filter.Level).To(Equal(logging.Level))
+				Ω(cfg.Loggers).To(HaveLen(2))
+				Ω(cfg.Loggers[0].Name).To(Equal("org.apache.zookeeper"))
+				Ω(cfg.Loggers[1].Name).To(Equal("org.eclipse.jetty"))
+				for _, logger := range cfg.Loggers {
+					Ω(logger.Level).To(Equal(logging.Level))
+				}
+				if logging.Format == "json" {
+					Ω(cfg.Appender.Encoder.Class).To(Equal("ch.qos.logback.classic.encoder.JsonEncoder"))
+					Ω(cfg.Appender.Encoder.Pattern).To(BeEmpty())
+				} else {
+					Ω(cfg.Appender.Encoder.Pattern).To(Equal("%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n"))
+				}
+			}
+		})
+
+		It("should apply omitted logging defaults without writing them to the cluster", func() {
+			z := &v1beta1.ZookeeperCluster{}
+			z.Spec.Logging.Level = "WARN"
+			z.WithDefaults()
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(ContainSubstring(`<root level="WARN">`))
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(ContainSubstring("<pattern>"))
+			Ω(z.Spec.Logging).To(Equal(v1beta1.LoggingConfig{Level: "WARN"}))
+
+			z.Spec.Logging = v1beta1.LoggingConfig{Format: "json"}
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(ContainSubstring(`<root level="INFO">`))
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(ContainSubstring("ch.qos.logback.classic.encoder.JsonEncoder"))
+			Ω(z.Spec.Logging).To(Equal(v1beta1.LoggingConfig{Format: "json"}))
+		})
+
+		It("should change the pod template only when effective logging changes", func() {
+			z := &v1beta1.ZookeeperCluster{}
+			z.WithDefaults()
+			defaultTemplate := zk.MakeStatefulSet(z).Spec.Template
+			Ω(defaultTemplate.Annotations).To(BeNil())
+
+			z.Spec.Logging.Level = "WARN"
+			warnTemplate := zk.MakeStatefulSet(z).Spec.Template
+			digest := sha256.Sum256([]byte(zk.MakeConfigMap(z).Data["logback.xml"]))
+			Ω(warnTemplate.Annotations).To(HaveKeyWithValue(hashAnnotation, fmt.Sprintf("%x", digest)))
+			Ω(zk.MakeStatefulSet(z).Spec.Template).To(Equal(warnTemplate))
+			Ω(z.Spec.Pod.Annotations).To(BeNil())
+
+			z.Spec.Conf.AdditionalConfig = map[string]string{"tcpKeepAlive": "true"}
+			Ω(zk.MakeStatefulSet(z).Spec.Template).To(Equal(warnTemplate))
+
+			z.Spec.Logging.Format = "json"
+			Ω(zk.MakeStatefulSet(z).Spec.Template.Annotations[hashAnnotation]).NotTo(Equal(warnTemplate.Annotations[hashAnnotation]))
+
+			z.Spec.Logging = v1beta1.LoggingConfig{Level: "INFO", Format: "text"}
+			Ω(zk.MakeStatefulSet(z).Spec.Template).To(Equal(defaultTemplate))
+		})
+
+		It("should project the pod's own logging configuration instead of the mutable ConfigMap", func() {
+			z := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{Name: "example"}}
+			z.Spec.Logging.Level = "WARN"
+			z.WithDefaults()
+			template := zk.MakeStatefulSet(z).Spec.Template
+			var conf v1.Volume
+			for _, volume := range template.Spec.Volumes {
+				if volume.Name == "conf" {
+					conf = volume
+				}
+			}
+			Ω(conf.Projected).NotTo(BeNil())
+			Ω(conf.Projected.Sources).To(HaveLen(2))
+			source := conf.Projected.Sources[0].ConfigMap
+			Ω(source).NotTo(BeNil())
+			Ω(source.Name).To(Equal(z.ConfigMapName()))
+			for _, item := range source.Items {
+				Ω(item.Path).NotTo(Equal("logback.xml"))
+			}
+			downward := conf.Projected.Sources[1].DownwardAPI
+			Ω(downward).NotTo(BeNil())
+			Ω(downward.Items).To(HaveLen(1))
+			Ω(downward.Items[0].Path).To(Equal("logback.xml"))
+			Ω(downward.Items[0].FieldRef.FieldPath).To(Equal("metadata.annotations['zookeeper.pravega.io/logback-config']"))
+			Ω(template.Annotations["zookeeper.pravega.io/logback-config"]).To(ContainSubstring(`<root level="WARN">`))
+
+			z.Spec.Logging.Level = "DEBUG"
+			Ω(zk.MakeConfigMap(z).Data["logback.xml"]).To(ContainSubstring(`<root level="DEBUG">`))
+			Ω(template.Annotations["zookeeper.pravega.io/logback-config"]).To(ContainSubstring(`<root level="WARN">`))
+		})
+
+		It("should preserve user annotations without mutating the CR annotation map", func() {
+			z := &v1beta1.ZookeeperCluster{}
+			z.WithDefaults()
+			z.Spec.Pod.Annotations = map[string]string{"custom": "keep", hashAnnotation: "user-value"}
+			original := z.DeepCopy()
+			Ω(zk.MakeStatefulSet(z).Spec.Template.Annotations).To(Equal(map[string]string{"custom": "keep"}))
+			Ω(z.Spec.Pod.Annotations).To(Equal(original.Spec.Pod.Annotations))
+
+			z.Spec.Logging.Level = "WARN"
+			annotations := zk.MakeStatefulSet(z).Spec.Template.Annotations
+			Ω(annotations).To(HaveKeyWithValue("custom", "keep"))
+			Ω(annotations[hashAnnotation]).NotTo(Equal("user-value"))
+			Ω(z.Spec.Pod.Annotations).To(Equal(original.Spec.Pod.Annotations))
+		})
+	})
 
 	Context("#MakeConfigMap", func() {
 		var cm *v1.ConfigMap

@@ -51,10 +51,11 @@ var _ reconcile.Reconciler = &ZookeeperClusterReconciler{}
 
 // ZookeeperClusterReconciler reconciles a ZookeeperCluster object
 type ZookeeperClusterReconciler struct {
-	Client   client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	ZkClient zk.ZookeeperClient
+	Client    client.Client
+	APIReader client.Reader
+	Log       logr.Logger
+	Scheme    *runtime.Scheme
+	ZkClient  zk.ZookeeperClient
 }
 
 type reconcileFun func(cluster *zookeeperv1beta1.ZookeeperCluster) error
@@ -66,7 +67,7 @@ type reconcileFun func(cluster *zookeeperv1beta1.ZookeeperCluster) error
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
-func (r *ZookeeperClusterReconciler) Reconcile(_ context.Context, request ctrl.Request) (ctrl.Result, error) {
+func (r *ZookeeperClusterReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.Log = log.WithValues(
 		"Request.Namespace", request.Namespace,
 		"Request.Name", request.Name)
@@ -74,7 +75,11 @@ func (r *ZookeeperClusterReconciler) Reconcile(_ context.Context, request ctrl.R
 
 	// Fetch the ZookeeperCluster instance
 	instance := &zookeeperv1beta1.ZookeeperCluster{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	err := reader.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile
@@ -84,6 +89,13 @@ func (r *ZookeeperClusterReconciler) Reconcile(_ context.Context, request ctrl.R
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		return reconcile.Result{}, err
+	}
+	if err := instance.Spec.ValidateLogging(); err != nil {
+		if !instance.DeletionTimestamp.IsZero() {
+			instance.WithDefaults()
+			return reconcile.Result{}, r.reconcileFinalizers(instance)
+		}
 		return reconcile.Result{}, err
 	}
 	changed := instance.WithDefaults()
@@ -232,6 +244,7 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(instance *zookeeperv1b
 		r.Log.Info("Creating a new Zookeeper StatefulSet",
 			"StatefulSet.Namespace", sts.Namespace,
 			"StatefulSet.Name", sts.Name)
+		zk.EnsureLogbackProjection(instance, nil, sts)
 		// label the RV of the zookeeperCluster when creating the sts
 		sts.Labels["owner-rv"] = instance.ResourceVersion
 		err = r.Client.Create(context.TODO(), sts)
@@ -250,6 +263,7 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(instance *zookeeperv1b
 			// Zookeeper StatefulSet version inherits ZookeeperCluster resource version
 			foundSts.Labels["owner-rv"] = instance.ResourceVersion
 		}
+		zk.EnsureLogbackProjection(instance, foundSts, sts)
 		foundSTSSize := *foundSts.Spec.Replicas
 		newSTSSize := *sts.Spec.Replicas
 		if newSTSSize != foundSTSSize {
@@ -633,6 +647,9 @@ func YAMLExporterReconciler(zookeepercluster *zookeeperv1beta1.ZookeeperCluster)
 
 // GenerateYAML generated secondary resource of ZookeeperCluster resources YAML files
 func (r *ZookeeperClusterReconciler) GenerateYAML(inst *zookeeperv1beta1.ZookeeperCluster) error {
+	if err := inst.Spec.ValidateLogging(); err != nil {
+		return err
+	}
 	if inst.WithDefaults() {
 		fmt.Println("set default values")
 	}
@@ -653,6 +670,7 @@ func (r *ZookeeperClusterReconciler) GenerateYAML(inst *zookeeperv1beta1.Zookeep
 // yamlStatefulSet will generates YAML file for StatefulSet
 func (r *ZookeeperClusterReconciler) yamlStatefulSet(instance *zookeeperv1beta1.ZookeeperCluster) (err error) {
 	sts := zk.MakeStatefulSet(instance)
+	zk.EnsureLogbackProjection(instance, nil, sts)
 
 	subdir, err := yamlexporter.CreateOutputSubDir("ZookeeperCluster", sts.Labels["component"])
 	return yamlexporter.GenerateOutputYAMLFile(subdir, sts.Kind, sts)
@@ -800,6 +818,9 @@ func (r *ZookeeperClusterReconciler) deletePVC(pvcItem corev1.PersistentVolumeCl
 }
 
 func (r *ZookeeperClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&zookeeperv1beta1.ZookeeperCluster{}).
 		Owns(&appsv1.StatefulSet{}).
