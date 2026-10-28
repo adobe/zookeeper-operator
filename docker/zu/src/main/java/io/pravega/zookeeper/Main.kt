@@ -100,7 +100,7 @@ fun runGet(args: Array<String>, suppressOutput: Boolean = false): String? {
             System.exit(1)
         }
         ! suppressOutput -> {
-            println(that.toString())
+            println(that)
         }
     }
     return that.toString()
