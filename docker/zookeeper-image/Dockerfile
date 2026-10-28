@@ -115,14 +115,14 @@ RUN set -eux; \
 # Verify that gosu binary works
     gosu nobody true
 
-# Single source of truth for the Apache ZooKeeper version. Everything else in
-# this file, and the image tags in .github/workflows/release.yml, derive from it.
-ARG ZK_VERSION=3.9.6
+# Supplied from docker/zu/build.gradle.kts by scripts/zookeeper-version.sh.
+ARG ZK_VERSION
 ARG SHORT_DISTRO_NAME=zookeeper-${ZK_VERSION}
 ARG DISTRO_NAME=apache-zookeeper-${ZK_VERSION}-bin
 
 # Download Apache Zookeeper, verify its PGP signature, untar and clean up
 RUN set -eux; \
+    test -n "$ZK_VERSION"; \
     ddist() { \
         local f="$1"; shift; \
         local distFile="$1"; shift; \

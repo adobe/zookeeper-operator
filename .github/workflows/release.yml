@@ -58,11 +58,7 @@ jobs:
       - name: Resolve Apache ZooKeeper version
         id: zk
         run: |
-          zk_version="$(sed -n 's/^ARG ZK_VERSION=//p' docker/zookeeper-image/Dockerfile)"
-          if [ -z "$zk_version" ]; then
-            echo "::error::Could not read ARG ZK_VERSION from docker/zookeeper-image/Dockerfile"
-            exit 1
-          fi
+          zk_version="$(./scripts/zookeeper-version.sh)"
           echo "Apache ZooKeeper version: $zk_version"
           echo "zk_version=$zk_version" >> "$GITHUB_OUTPUT"
 
@@ -128,6 +124,8 @@ jobs:
         with:
           context: docker/zookeeper-image
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            ZK_VERSION=${{ needs.prepare.outputs.zk_version }}
           tags: ${{ steps.meta-zk-apache.outputs.tags }}
           labels: ${{ steps.meta-zk-apache.outputs.labels }}
           annotations: ${{ steps.meta-zk-apache.outputs.annotations }}

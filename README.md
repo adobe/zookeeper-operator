@@ -41,7 +41,7 @@ The project is currently beta. While no breaking API changes are currently plann
 
 ### Overview
 
-This operator runs an Apache ZooKeeper 3.9.6 cluster, and uses Zookeeper dynamic reconfiguration to handle node membership.
+This operator manages Apache ZooKeeper clusters and uses Zookeeper dynamic reconfiguration to handle node membership.
 
 The operator itself is built with the [Operator framework](https://github.com/operator-framework/operator-sdk).
 
@@ -381,6 +381,18 @@ The list of available commands are
 ## Development
 
 ### Update dependencies
+
+Dependabot checks ZooKeeper releases on Maven Central weekly, with a seven-day
+cooldown, and opens a separate ZooKeeper PR. The `zookeeperVersion` variable in
+[`docker/zu/build.gradle.kts`](docker/zu/build.gradle.kts) controls both the
+server image and the `zu` client dependency. Run `make build-zk-image` to build
+both images locally. Direct builds of `docker/zookeeper-image` must pass
+`--build-arg ZK_VERSION="$(./scripts/zookeeper-version.sh)"`.
+
+Merging a version PR does not publish images or upgrade running clusters.
+Publish a GitHub release to build and publish the new images, then update
+`DefaultZkContainerVersion` separately if the operator should default to that
+published image. Existing clusters require an explicit image-tag upgrade.
 
 Run `./update-go-deps.sh` to update Go to the latest stable release, Go modules,
 and build-tool pins in the Makefile and CI workflows: kustomize (within v5),
