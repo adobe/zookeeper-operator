@@ -324,11 +324,12 @@ func makeZkLogbackConfigString() string {
 `
 }
 
-// makeZkLogbackQuietConfigString returns logback-quiet.xml with root and key loggers at ERROR.
+// makeZkLogbackQuietConfigString sends ERROR logs to stderr to preserve client command stdout.
 func makeZkLogbackQuietConfigString() string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
   <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
     <encoder>
       <pattern>%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n</pattern>
     </encoder>

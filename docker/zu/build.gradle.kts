@@ -21,6 +21,7 @@ val zookeeperVersion = "3.9.6"
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("org.apache.zookeeper:zookeeper:$zookeeperVersion")
+    runtimeOnly("ch.qos.logback:logback-classic:1.6.6")
 }
 
 tasks.withType<ShadowJar>() {
