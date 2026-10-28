@@ -44,7 +44,7 @@ func IsPVCOrphan(zkPvcName string, replicas int32) bool {
 		return false
 	}
 
-	ordinal, err := strconv.Atoi(zkPvcName[index+1:])
+	ordinal, err := strconv.ParseInt(zkPvcName[index+1:], 10, 32)
 	if err != nil {
 		return false
 	}
