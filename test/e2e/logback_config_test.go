@@ -57,6 +57,24 @@ var _ = Describe("Logback config", func() {
 			Expect(stdout).To(ContainSubstring("logback.xml"), "runtime config dir should contain logback.xml")
 			Expect(stdout).To(ContainSubstring("logback-quiet.xml"), "runtime config dir should contain logback-quiet.xml")
 
+			By("verifying helper logging preserves machine-readable stdout")
+			stdout, stderr, err = zk_e2eutil.PodExec(ctx, cfg, zk.Namespace, pod.Name, "zookeeper", []string{
+				"bash", "-c", "source /usr/local/bin/zookeeperFunctions.sh; zkRunZu get-all localhost:2181",
+			})
+			Expect(err).NotTo(HaveOccurred(), "helper: stdout=%q stderr=%q", stdout, stderr)
+			Expect(stdout).NotTo(BeEmpty())
+			for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+				Expect(line).To(MatchRegexp(`^(server\.[0-9]+=.+|version=[0-9a-fA-F]+)$`))
+			}
+			Expect(stderr).NotTo(ContainSubstring("No SLF4J providers were found"))
+
+			By("verifying the helper JVM has a 256 MiB default heap cap")
+			stdout, stderr, err = zk_e2eutil.PodExec(ctx, cfg, zk.Namespace, pod.Name, "zookeeper", []string{
+				"bash", "-c", "source /usr/local/bin/zookeeperFunctions.sh; CLIENT_JVMFLAGS='-XX:+PrintFlagsFinal -version' zkRunZu",
+			})
+			Expect(err).NotTo(HaveOccurred(), "helper JVM flags: stdout=%q stderr=%q", stdout, stderr)
+			Expect(stdout).To(MatchRegexp(`(?m)^\s*size_t\s+MaxHeapSize\s*=\s*268435456\b`))
+
 			By("verifying desired log level is applied (no DEBUG from ZooKeeper/Jetty when we expect INFO)")
 			logs, err := zk_e2eutil.GetPodLogs(ctx, cfg, zk.Namespace, pod.Name, "zookeeper", &corev1.PodLogOptions{TailLines: intPtr(200)})
 			Expect(err).NotTo(HaveOccurred())

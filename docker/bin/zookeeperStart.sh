@@ -20,7 +20,6 @@ START_DELAY=${START_DELAY:-0}
 HOST=`hostname -s`
 DATA_DIR=/data
 MYID_FILE=$DATA_DIR/myid
-LOG4J_CONF=/conf/log4j-quiet.properties
 DYNCONFIG=$DATA_DIR/zoo.cfg.dynamic
 STATIC_CONFIG=/data/conf/zoo.cfg
 
@@ -165,7 +164,7 @@ if [[ "$REGISTER_NODE" == true ]]; then
     else
       ZK_OPTIONS=""
     fi
-    java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID  $ZKCONFIG $DYNCONFIG 
+    zkRunZu add "$ZKURL" "$MYID" "$ZKCONFIG" "$DYNCONFIG"
     set +e
 fi
 

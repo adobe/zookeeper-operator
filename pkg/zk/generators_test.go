@@ -158,11 +158,12 @@ var _ = Describe("Generators Spec", func() {
 					Ω(cfg).To(ContainSubstring("<logger name=\"org.eclipse.jetty\" level=\"INFO\"/>"))
 				})
 
-				It("should have logback-quiet.xml with root and loggers at ERROR", func() {
+				It("should send quiet ERROR logging to stderr", func() {
 					cfg := cm.Data["logback-quiet.xml"]
 					Ω(cfg).To(ContainSubstring("<root level=\"ERROR\">"))
 					Ω(cfg).To(ContainSubstring("<logger name=\"org.apache.zookeeper\" level=\"ERROR\"/>"))
 					Ω(cfg).To(ContainSubstring("<logger name=\"org.eclipse.jetty\" level=\"ERROR\"/>"))
+					Ω(cfg).To(ContainSubstring("<target>System.err</target>"))
 				})
 			})
 		})

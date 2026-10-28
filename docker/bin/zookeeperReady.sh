@@ -17,7 +17,6 @@ source /usr/local/bin/zookeeperFunctions.sh
 HOST=`hostname -s`
 DATA_DIR=/data
 MYID_FILE=$DATA_DIR/myid
-LOG4J_CONF=/conf/log4j-quiet.properties
 STATIC_CONFIG=/data/conf/zoo.cfg
 
 # used when zkid starts from value grater then 1, default 1
@@ -96,9 +95,9 @@ if [[ "$OK" == "imok" ]]; then
       else
         ZK_OPTIONS=""
       fi
-      java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar remove $ZKURL $MYID 
+      zkRunZu remove "$ZKURL" "$MYID"
       sleep 1
-      java -Dlog4j.configuration=file:"$LOG4J_CONF" $ZK_OPTIONS -jar /opt/libs/zu.jar add $ZKURL $MYID $ZKCONFIG
+      zkRunZu add "$ZKURL" "$MYID" "$ZKCONFIG"
       exit 0
     else
       echo "Something has gone wrong. Unable to determine zookeeper role."
