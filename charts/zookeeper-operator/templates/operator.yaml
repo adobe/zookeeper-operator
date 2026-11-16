@@ -30,6 +30,10 @@ spec:
       - name: {{ template "zookeeper-operator.fullname" . }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext }}
+        securityContext:
+{{ toYaml . | indent 10 }}
+        {{- end }}
         ports:
         - containerPort: {{ int .Values.metricsPort }}
           name: metrics

@@ -69,8 +69,19 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | nodeSelector | object | `{}` | Operator pod node selector can be set |
 | rbac.create | bool | `true` | Install RBAC roles and bindings. |
 | resources | object | `{}` | Specifies resource requirements for the container |
-| securityContext | object | `{}` |  |
+| securityContext | object | `{}` | Security context for the operator container (not the Pod or additional sidecars). |
 | serviceAccount.create | bool | `true` | Create service account |
 | serviceAccount.name | string | `"zookeeper-operator"` | Name for the service account |
 | tolerations | list | `[]` | Operator pod tolerations can be set |
 | watchNamespace | string | `""` | List of namespaces where Operator watches for custom resources. |
+
+`securityContext: {}` keeps the image's existing user and security settings.
+Nonempty settings now apply to the operator container. Choose a user and
+filesystem policy compatible with your operator image; an arbitrary `runAsUser`
+is not guaranteed to work. Additional sidecars keep their own settings.
+
+Run the chart rendering regression tests with Helm and Go installed:
+
+```bash
+go test -tags=manifests ./test/manifests -count=1
+```

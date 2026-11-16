@@ -15,6 +15,7 @@ image:
   # -- Image pull policy
   pullPolicy: IfNotPresent
 
+# -- Security context for the operator container (not the Pod or additional sidecars).
 securityContext: {}
 #  runAsUser: 1001
 #  runAsGroup: 1001
