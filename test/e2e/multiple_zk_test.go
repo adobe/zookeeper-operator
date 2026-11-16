@@ -15,7 +15,6 @@ import (
 	. "github.com/onsi/gomega"
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zk_e2eutil "github.com/pravega/zookeeper-operator/pkg/test/e2e/e2eutil"
-	"time"
 )
 
 // Test create and recreate a Zookeeper cluster with the same name
@@ -30,12 +29,12 @@ var _ = Describe("Operations with multiple cluster", func() {
 			defaultCluster.ObjectMeta.Name = "zk1"
 			defaultCluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
 
-			zk1, err := zk_e2eutil.CreateCluster(logger, k8sClient, defaultCluster)
+			zk1, err := zk_e2eutil.CreateCluster(ctx, logger, k8sClient, defaultCluster)
 			Expect(err).NotTo(HaveOccurred())
 
 			// A default zookeeper cluster should have 3 replicas
 			podSize := 3
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
 
 			defaultCluster = zk_e2eutil.NewDefaultCluster(testNamespace)
 
@@ -49,13 +48,13 @@ var _ = Describe("Operations with multiple cluster", func() {
 				Repository: "pravega/zookeeper",
 				Tag:        initialVersion,
 			}
-			zk2, err := zk_e2eutil.CreateCluster(logger, k8sClient, defaultCluster)
+			zk2, err := zk_e2eutil.CreateCluster(ctx, logger, k8sClient, defaultCluster)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk2, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk2, podSize)).NotTo(HaveOccurred())
 
 			// This is to get the latest Zookeeper cluster object
-			zk2, err = zk_e2eutil.GetCluster(logger, k8sClient, zk2)
+			zk2, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(zk2.Status.CurrentVersion).To(Equal(initialVersion))
 
@@ -66,46 +65,47 @@ var _ = Describe("Operations with multiple cluster", func() {
 			defaultCluster.ObjectMeta.Name = "zk3"
 			defaultCluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
 
-			zk3, err := zk_e2eutil.CreateCluster(logger, k8sClient, defaultCluster)
+			zk3, err := zk_e2eutil.CreateCluster(ctx, logger, k8sClient, defaultCluster)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk3, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk3, podSize)).NotTo(HaveOccurred())
 
 			// This is to get the latest zk cluster object
-			zk1, err = zk_e2eutil.GetCluster(logger, k8sClient, zk1)
+			zk1, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk1)
+			Expect(err).NotTo(HaveOccurred())
 
 			// scale up the replicas in first cluster
 			zk1.Spec.Replicas = 5
 			podSize = 5
 
-			Expect(zk_e2eutil.UpdateCluster(logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.UpdateCluster(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
 
-			zk1, err = zk_e2eutil.GetCluster(logger, k8sClient, zk1)
+			zk1, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk1)
 			Expect(err).NotTo(HaveOccurred())
 
 			//scale down the replicas back to 3
 			zk1.Spec.Replicas = 3
 			podSize = 3
 
-			Expect(zk_e2eutil.UpdateCluster(logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.UpdateCluster(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
 
 			// This is to get the latest Zookeeper cluster object
-			zk2, err = zk_e2eutil.GetCluster(logger, k8sClient, zk2)
+			zk2, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk2)
 			Expect(err).NotTo(HaveOccurred())
 
 			//upgrade the image in second Cluster
 			zk2.Spec.Image.Tag = upgradeVersion
 
-			Expect(zk_e2eutil.UpdateCluster(logger, k8sClient, zk2)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.UpdateCluster(ctx, logger, k8sClient, zk2)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToUpgrade(logger, k8sClient, zk2, upgradeVersion)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToUpgrade(ctx, logger, k8sClient, zk2, upgradeVersion)).NotTo(HaveOccurred())
 
 			// This is to get the latest Zookeeper cluster object
-			zk2, err = zk_e2eutil.GetCluster(logger, k8sClient, zk2)
+			zk2, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk2)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(zk2.Spec.Image.Tag).To(Equal(upgradeVersion))
@@ -113,26 +113,26 @@ var _ = Describe("Operations with multiple cluster", func() {
 			Expect(zk2.Status.TargetVersion).To(Equal(""))
 
 			// This is to get the latest zk cluster object
-			zk3, err = zk_e2eutil.GetCluster(logger, k8sClient, zk3)
+			zk3, err = zk_e2eutil.GetCluster(ctx, logger, k8sClient, zk3)
+			Expect(err).NotTo(HaveOccurred())
 
 			//Delete all pods in the 3rd Cluster
 			podDeleteCount := 3
-			Expect(zk_e2eutil.DeletePods(logger, k8sClient, zk3, podDeleteCount)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.DeletePods(ctx, logger, k8sClient, zk3, podDeleteCount)).NotTo(HaveOccurred())
 
-			time.Sleep(60 * time.Second)
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk3, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk3, podSize)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.DeleteCluster(logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.DeleteCluster(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToTerminate(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.DeleteCluster(logger, k8sClient, zk2)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.DeleteCluster(ctx, logger, k8sClient, zk2)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk2)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToTerminate(ctx, logger, k8sClient, zk2)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.DeleteCluster(logger, k8sClient, zk3)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.DeleteCluster(ctx, logger, k8sClient, zk3)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk3)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToTerminate(ctx, logger, k8sClient, zk3)).NotTo(HaveOccurred())
 
 			//Recreating cluster with same name
 			defaultCluster = zk_e2eutil.NewDefaultCluster(testNamespace)
@@ -141,13 +141,13 @@ var _ = Describe("Operations with multiple cluster", func() {
 			defaultCluster.ObjectMeta.Name = "zk1"
 			defaultCluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
 
-			zk1, err = zk_e2eutil.CreateCluster(logger, k8sClient, defaultCluster)
+			zk1, err = zk_e2eutil.CreateCluster(ctx, logger, k8sClient, defaultCluster)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, zk1, podSize)).NotTo(HaveOccurred())
 
-			Expect(zk_e2eutil.DeleteCluster(logger, k8sClient, zk1)).NotTo(HaveOccurred())
-			Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.DeleteCluster(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToTerminate(ctx, logger, k8sClient, zk1)).NotTo(HaveOccurred())
 		})
 	})
 })

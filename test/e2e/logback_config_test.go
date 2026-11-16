@@ -39,14 +39,14 @@ var _ = Describe("Logback config", func() {
 			cluster.Status.Init()
 			cluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
 
-			zk, err := zk_e2eutil.CreateCluster(logger, k8sClient, cluster)
+			zk, err := zk_e2eutil.CreateCluster(ctx, logger, k8sClient, cluster)
 			Expect(err).NotTo(HaveOccurred())
 
 			podSize := 3
-			Expect(zk_e2eutil.WaitForClusterToBecomeReady(logger, k8sClient, cluster, podSize)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToBecomeReady(ctx, logger, k8sClient, cluster, podSize)).NotTo(HaveOccurred())
 
 			By("fetching a running pod")
-			podList, err := zk_e2eutil.GetPods(k8sClient, zk)
+			podList, err := zk_e2eutil.GetPods(ctx, k8sClient, zk)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(podList.Items).NotTo(BeEmpty())
 			var pod *corev1.Pod
@@ -106,7 +106,7 @@ var _ = Describe("Logback config", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(zk), zk)).To(Succeed())
 				zk.Spec.Logging = logging
 				Expect(zk.Spec.TriggerRollingRestart).To(BeFalse())
-				Expect(zk_e2eutil.UpdateCluster(logger, k8sClient, zk)).To(Succeed())
+				Expect(zk_e2eutil.UpdateCluster(ctx, logger, k8sClient, zk)).To(Succeed())
 				podList = waitForLoggingRollout(zk, podList)
 
 				since := metav1.Now()
@@ -157,7 +157,7 @@ var _ = Describe("Logback config", func() {
 
 			By("deleting Zookeeper cluster")
 			Expect(k8sClient.Delete(ctx, zk)).Should(Succeed())
-			Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk)).NotTo(HaveOccurred())
+			Expect(zk_e2eutil.WaitForClusterToTerminate(ctx, logger, k8sClient, zk)).NotTo(HaveOccurred())
 		})
 	})
 
@@ -197,7 +197,7 @@ func waitForLoggingRollout(cluster *v1beta1.ZookeeperCluster, previous *corev1.P
 		} else {
 			g.Expect(sts.Spec.Template.Annotations["zookeeper.pravega.io/logback-hash"]).NotTo(BeEmpty())
 		}
-		pods, err := zk_e2eutil.GetPods(k8sClient, cluster)
+		pods, err := zk_e2eutil.GetPods(ctx, k8sClient, cluster)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(pods.Items).To(HaveLen(int(cluster.Spec.Replicas)))
 		for _, pod := range pods.Items {

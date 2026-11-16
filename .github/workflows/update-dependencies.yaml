@@ -45,6 +45,7 @@ jobs:
           make check
           go vet ./...
           make test
+          make test-envtest
       - name: Create or update dependency PR
         uses: peter-evans/create-pull-request@v8.1.1
         with:
@@ -70,7 +71,7 @@ jobs:
             ### Change log description
 
             - Update Go and synchronize the Dockerfile fallback.
-            - Refresh Go modules, build-tool pins, and CI image tags/digests.
+            - Refresh Go modules, build-tool pins, kind node-image digests, and envtest assets within existing Kubernetes minors.
             - Regenerate code, manifests, and the Helm chart CRD.
 
             ### Purpose of the change
@@ -91,6 +92,7 @@ jobs:
             - `make check`.
             - `go vet ./...`.
             - `make test`.
+            - `make test-envtest`.
 
             Validation uses `GOTOOLCHAIN=auto` for the updated Go version.
             Review the PR's remaining CI checks, including image builds and chart validation.

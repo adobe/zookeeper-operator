@@ -40,6 +40,17 @@ def latest_release(repo):
     return stable_version(release.get("tag_name", ""))
 
 
+def releases(repo):
+    pages = json.loads(output("gh", "api", "--paginate", "--slurp",
+                              f"repos/{repo}/releases?per_page=100"))
+    return [release for page in pages for release in page
+            if not release.get("draft") and not release.get("prerelease")]
+
+
+def version_tuple(version):
+    return tuple(map(int, version.removeprefix("v").split(".")))
+
+
 files = {}
 
 
@@ -79,6 +90,63 @@ for variable, module in (
                                     f"{module}@latest"))
     update_pin("Makefile", rf"^({variable} \?= )v[0-9.]+$", version)
     print(f"{variable}: {version}", flush=True)
+
+kind_version = latest_release("kubernetes-sigs/kind")
+update_pin("Makefile", r"^(KIND_VERSION \?= )v[0-9.]+$", kind_version)
+print(f"KIND_VERSION: {kind_version}", flush=True)
+
+kind_images = []
+for release in releases("kubernetes-sigs/kind"):
+    kind_images.extend(re.findall(
+        r"kindest/node:v([0-9]+\.[0-9]+\.[0-9]+)@(sha256:[0-9a-f]{64})",
+        release.get("body") or ""))
+node_pins = re.findall(r"node_image: kindest/node:v([0-9]+\.[0-9]+\.[0-9]+)@sha256:[0-9a-f]{64}",
+                      Path(".github/workflows/e2e.yaml").read_text())
+if not node_pins:
+    sys.exit("Expected pinned kind matrix node images")
+for current in node_pins:
+    minor = ".".join(current.split(".")[:2])
+    candidates = [(version, digest) for version, digest in kind_images
+                  if version.startswith(minor + ".") and version_tuple(version) >= version_tuple(current)]
+    if not candidates:
+        sys.exit(f"No published kind node image for Kubernetes {minor} at least {current}")
+    version, digest = max(candidates, key=lambda item: version_tuple(item[0]))
+    actual = output("docker", "buildx", "imagetools", "inspect", "--format",
+                    "{{.Manifest.Digest}}", f"kindest/node:v{version}")
+    if actual != digest:
+        sys.exit(f"kind node digest does not match the published release: v{version}")
+    update_pin(".github/workflows/e2e.yaml",
+               rf"(node_image: kindest/node:v){re.escape(minor)}\.[0-9]+@sha256:[0-9a-f]{{64}}",
+               f"{version}@{digest}")
+    print(f"kind Kubernetes {minor}: v{version}@{digest}", flush=True)
+
+envtest_tool = output("go", "list", "-m", "-f", "{{.Version}}",
+                      "sigs.k8s.io/controller-runtime/tools/setup-envtest@latest")
+if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9]{14}-[0-9a-f]{12})?", envtest_tool):
+    sys.exit(f"Invalid setup-envtest module version: {envtest_tool!r}")
+update_pin("Makefile", r"^(ENVTEST_TOOL_VERSION = )\S+$", envtest_tool)
+
+current_envtest = re.findall(r"^ENVTEST_K8S_VERSION = ([0-9]+\.[0-9]+\.[0-9]+)$",
+                            Path("Makefile").read_text(), re.MULTILINE)
+if len(current_envtest) != 1:
+    sys.exit("Expected one ENVTEST_K8S_VERSION pin")
+current_envtest = current_envtest[0]
+envtest_minor = ".".join(current_envtest.split(".")[:2])
+envtest_versions = []
+for release in releases("kubernetes-sigs/controller-tools"):
+    match = re.fullmatch(r"envtest-v([0-9]+\.[0-9]+\.[0-9]+)", release.get("tag_name", ""))
+    if not match:
+        continue
+    version = match[1]
+    required = {f"envtest-v{version}-{platform}.tar.gz" for platform in ("linux-amd64", "darwin-arm64")}
+    assets = {asset["name"] for asset in release.get("assets", [])}
+    if version.startswith(envtest_minor + ".") and version_tuple(version) >= version_tuple(current_envtest) and required <= assets:
+        envtest_versions.append(version)
+if not envtest_versions:
+    sys.exit(f"No published envtest assets for Kubernetes {envtest_minor} at least {current_envtest}")
+envtest_version = max(envtest_versions, key=version_tuple)
+update_pin("Makefile", r"^(ENVTEST_K8S_VERSION = )[0-9.]+$", envtest_version)
+print(f"envtest: {envtest_tool}, Kubernetes {envtest_version}", flush=True)
 
 for repo, action, filenames in (
     ("golangci/golangci-lint", "golangci/golangci-lint-action",

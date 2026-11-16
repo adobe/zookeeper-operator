@@ -43,6 +43,7 @@ var (
 )
 
 func TestAPIs(t *testing.T) {
+	ctx, cancel = context.WithCancel(t.Context())
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controller e2e Suite")
 }
@@ -50,8 +51,6 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logger = zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true))
 	logf.SetLogger(logger)
-
-	ctx, cancel = context.WithCancel(context.TODO())
 
 	enabled := true
 	By("bootstrapping test environment")
@@ -102,7 +101,7 @@ var _ = BeforeSuite(func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err = k8sManager.Start(ctrl.SetupSignalHandler())
+			err = k8sManager.Start(ctx)
 			Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		}()
 	}

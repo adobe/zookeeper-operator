@@ -14,6 +14,7 @@ FILES = (
     ".github/workflows/ci.yaml",
     ".github/workflows/release.yml",
     ".github/workflows/workflow-lint.yaml",
+    ".github/workflows/e2e.yaml",
 )
 
 # Only external commands are faked; the updater edits real fixture files.
@@ -40,6 +41,8 @@ if tool == "go":
             print("v5.99.0")
         elif module.startswith("sigs.k8s.io/controller-tools@"):
             print("v0.99.0")
+        elif module.startswith("sigs.k8s.io/controller-runtime/tools/setup-envtest@"):
+            print("v0.0.0-20990101000000-abcdef012345")
     sys.exit(0)
 if tool == "make":
     if args != ["manifests", "generate"]:
@@ -56,12 +59,25 @@ if tool == "curl":
         sys.exit("unexpected Go release lookup")
     print(os.environ.get("GO_RELEASE", "go1.99.2\\ntime 2099-01-01T00:00:00Z"))
 elif tool == "gh":
+    if args[-1] == "repos/kubernetes-sigs/kind/releases?per_page=100":
+        minors = ("1.35",) if os.environ.get("NO_NODE_IMAGE") else ("1.34", "1.35")
+        body = "\\n".join(f"kindest/node:v{minor}.9@sha256:" + "b" * 64 for minor in minors)
+        print(json.dumps([[{"tag_name": "v0.99.0", "body": body}]]))
+        sys.exit(0)
+    if args[-1] == "repos/kubernetes-sigs/controller-tools/releases?per_page=100":
+        assets = [] if os.environ.get("NO_ENVTEST_ASSETS") else [
+            {"name": f"envtest-v1.34.9-{platform}.tar.gz"}
+            for platform in ("linux-amd64", "darwin-arm64")
+        ]
+        print(json.dumps([[{"tag_name": "envtest-v1.34.9", "assets": assets}]]))
+        sys.exit(0)
     repo = args[-1].removeprefix("repos/").removesuffix("/releases/latest")
     versions = {
         "golangci/golangci-lint": "v2.99.0",
         "helm/helm": "v4.99.0",
         "yannh/kubeconform": "v0.99.0",
         "rhysd/actionlint": "v1.99.0",
+        "kubernetes-sigs/kind": "v0.99.0",
     }
     print(json.dumps({"tag_name": os.environ.get("RELEASE_TAG", versions[repo]),
                       "draft": False, "prerelease": False}))
@@ -69,9 +85,11 @@ elif tool == "docker":
     if args[:3] != ["buildx", "imagetools", "inspect"]:
         sys.exit("unexpected Docker invocation")
     if args[-1] not in ("ghcr.io/yannh/kubeconform:v0.99.0",
-                        "rhysd/actionlint:1.99.0"):
+                        "rhysd/actionlint:1.99.0",
+                        "kindest/node:v1.34.9", "kindest/node:v1.35.9"):
         sys.exit("wrong image tag")
-    print(os.environ.get("IMAGE_DIGEST", "sha256:" + "a" * 64))
+    digest_char = "b" if args[-1].startswith("kindest/node:") else "a"
+    print(os.environ.get("IMAGE_DIGEST", "sha256:" + digest_char * 64))
 else:
     sys.exit("unexpected command")
 """
@@ -159,6 +177,26 @@ class UpdateDepsTest(unittest.TestCase):
             with self.subTest(env=env):
                 for name, text in before.items():
                     (self.root / name).write_text(text)
+                result = self.run_updater(**env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(before, self.snapshot())
+
+    def test_updates_kind_and_envtest_without_advancing_support_minors(self):
+        result = self.run_updater()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        makefile = (self.root / "Makefile").read_text()
+        self.assertIn("KIND_VERSION ?= v0.99.0", makefile)
+        self.assertIn("ENVTEST_TOOL_VERSION = v0.0.0-20990101000000-abcdef012345", makefile)
+        self.assertIn("ENVTEST_K8S_VERSION = 1.34.9", makefile)
+        workflow = (self.root / ".github/workflows/e2e.yaml").read_text()
+        for minor in ("1.34", "1.35"):
+            self.assertIn(f'kubernetes: "{minor}"', workflow)
+            self.assertIn(f"kindest/node:v{minor}.9@sha256:" + "b" * 64, workflow)
+
+    def test_unavailable_compatibility_artifacts_do_not_partially_update_pins(self):
+        before = self.snapshot()
+        for env in ({"NO_NODE_IMAGE": "1"}, {"NO_ENVTEST_ASSETS": "1"}):
+            with self.subTest(env=env):
                 result = self.run_updater(**env)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(before, self.snapshot())
