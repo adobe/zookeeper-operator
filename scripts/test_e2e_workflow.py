@@ -74,32 +74,34 @@ class SchemaMatrixTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yaml").read_text()
         step = workflow.split("- name: Validate rendered manifests with kubeconform\n", 1)[1]
         script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("\n  operator-image:", 1)[0])
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / ".github/workflows").mkdir(parents=True)
-            (root / ".github/workflows/e2e.yaml").write_text(
-                "node_image: kindest/node:v1.34.9@sha256:unused\n"
-                "node_image: kindest/node:v1.35.9@sha256:unused\n"
-            )
-            tools = root / "tools"
-            tools.mkdir()
-            for name, script_text in (
-                ("helm", "#!/bin/sh\necho '{}'\n"),
-                ("docker", '#!/bin/sh\ncat >/dev/null\nprintf "%s\\n" "$*" >> versions\n'),
-            ):
-                tool = tools / name
-                tool.write_text(script_text)
-                tool.chmod(0o755)
-            result = subprocess.run(
-                ["bash", "-euo", "pipefail", "-c", script], cwd=root,
-                env={**os.environ, "PATH": f"{tools}:{os.environ['PATH']}"},
-                text=True, capture_output=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            commands = (root / "versions").read_text().splitlines()
-            self.assertEqual(len(commands), 2)
-            for command, version in zip(commands, ("1.34.9", "1.35.9")):
-                self.assertIn(f"-kubernetes-version {version} ", command)
+        for label, e2e in (
+            ("current", (ROOT / ".github/workflows/e2e.yaml").read_text()),
+            ("updated patch", "node_image: kindest/node:v1.34.9@sha256:unused\n"),
+        ):
+            with self.subTest(label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                (root / ".github/workflows").mkdir(parents=True)
+                (root / ".github/workflows/e2e.yaml").write_text(e2e)
+                tools = root / "tools"
+                tools.mkdir()
+                for name, script_text in (
+                    ("helm", "#!/bin/sh\necho '{}'\n"),
+                    ("docker", '#!/bin/sh\ncat >/dev/null\nprintf "%s\\n" "$*" >> versions\n'),
+                ):
+                    tool = tools / name
+                    tool.write_text(script_text)
+                    tool.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "-euo", "pipefail", "-c", script], cwd=root,
+                    env={**os.environ, "PATH": f"{tools}:{os.environ['PATH']}"},
+                    text=True, capture_output=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                commands = (root / "versions").read_text().splitlines()
+                self.assertEqual(len(commands), 1, "validate only the minimum supported Kubernetes minor")
+                self.assertRegex(commands[0], r"-kubernetes-version 1\.34\.\d+ ")
+                if label == "updated patch":
+                    self.assertIn("-kubernetes-version 1.34.9 ", commands[0])
 
 
 class UnitSuiteSelectionTest(unittest.TestCase):

@@ -10,10 +10,9 @@ This chart bootstraps a [Zookeeper Operator](https://github.com/pravega/zookeepe
   - Kubernetes **1.34 or newer**; the chart rejects older versions.
   - Helm **3.8 or newer** for stable OCI support. CI also checks Helm 4.
 
-The initial live CI matrix targets Kubernetes **1.34 / 1.35**, with the kind
-tool and node images pinned in the Makefile and e2e workflow. Live validation is pending; these are
-matrix targets, not a claim that both jobs have passed. Later minors are not
-automatically supported. Use current security patches in production.
+Live CI targets Kubernetes **1.34** only, the minimum supported minor, with the
+kind tool and node image pinned in the Makefile and e2e workflow. Later minors
+are not tested or guaranteed. Use current security patches in production.
 For clusters older than 1.34, retain an earlier operator/chart release.
 
 ## Installing the Chart

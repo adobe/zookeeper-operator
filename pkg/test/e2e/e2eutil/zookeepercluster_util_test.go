@@ -173,7 +173,7 @@ func setWaitDurations(t *testing.T, interval time.Duration) {
 	ReadyTimeout, UpgradeTimeout, TerminateTimeout = 30*time.Millisecond, 30*time.Millisecond, 30*time.Millisecond
 }
 
-func waitTestClient(t *testing.T, objects ...client.Object) client.Client {
+func waitTestClient(t *testing.T, objects ...client.Object) client.WithWatch {
 	t.Helper()
 	s := runtime.NewScheme()
 	if err := corev1.AddToScheme(s); err != nil {

@@ -52,11 +52,10 @@ The operator itself is built with the [Operator framework](https://github.com/op
 - Access to a Kubernetes **1.34 or newer** cluster.
 - Helm **3.8 or newer** for stable OCI chart installation (CI also checks Helm 4).
 
-The initial compatibility matrix targets Kubernetes **1.34** and **1.35**,
-using the kind version pinned in the Makefile and node images pinned in
-`.github/workflows/e2e.yaml`. Live matrix
-validation is pending; a configured CI job is not evidence of tested support.
-Newer minors are not automatically tested or guaranteed. Use current security
+Live CI targets Kubernetes **1.34**, the minimum supported minor, using the
+kind version pinned in the Makefile and node image pinned in
+`.github/workflows/e2e.yaml`.
+Newer minors are not tested or guaranteed. Use current security
 patches in production; the pinned CI patches are reproducible test fixtures.
 Kubernetes versions below 1.34 are no longer supported, and the Helm chart
 rejects them. Keep an earlier operator/chart release for older clusters.
@@ -476,7 +475,7 @@ The tagged suite verifies status-subresource isolation, stale-update conflicts,
 and deletion finalizers using the repository CRD and isolated namespaces.
 It does not run the operator, a StatefulSet controller, garbage collection, or
 a storage provisioner; full reconciliation and storage behavior still require
-the live kind e2e matrix.
+the live kind e2e suite.
 
 ### Update dependencies
 

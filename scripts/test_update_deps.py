@@ -189,9 +189,9 @@ class UpdateDepsTest(unittest.TestCase):
         self.assertIn("ENVTEST_TOOL_VERSION = v0.0.0-20990101000000-abcdef012345", makefile)
         self.assertIn("ENVTEST_K8S_VERSION = 1.34.9", makefile)
         workflow = (self.root / ".github/workflows/e2e.yaml").read_text()
-        for minor in ("1.34", "1.35"):
-            self.assertIn(f'kubernetes: "{minor}"', workflow)
-            self.assertIn(f"kindest/node:v{minor}.9@sha256:" + "b" * 64, workflow)
+        self.assertIn('kubernetes: "1.34"', workflow)
+        self.assertIn("kindest/node:v1.34.9@sha256:" + "b" * 64, workflow)
+        self.assertNotIn('kubernetes: "1.35"', workflow)
 
     def test_unavailable_compatibility_artifacts_do_not_partially_update_pins(self):
         before = self.snapshot()

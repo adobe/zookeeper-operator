@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/pravega/zookeeper-operator/api/v1beta1"
@@ -42,6 +43,49 @@ import (
 func TestZookeepercluster(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "ZookeeperCluster Controller Spec")
+}
+
+func TestReconcileEventPredicate(t *testing.T) {
+	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Generation: 1}}
+	ready := sts.DeepCopy()
+	ready.Status.ReadyReplicas = 1
+	rollout := sts.DeepCopy()
+	rollout.Status.UpdateRevision = "new-revision"
+	stsSpec := sts.DeepCopy()
+	stsSpec.Generation++
+	metadata := sts.DeepCopy()
+	metadata.ResourceVersion = "2"
+	metadata.Labels = map[string]string{"owner-rv": "2"}
+	cluster := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{Generation: 1}}
+	clusterSpec := cluster.DeepCopy()
+	clusterSpec.Generation++
+	clusterStatus := cluster.DeepCopy()
+	clusterStatus.Status.ReadyReplicas = 1
+
+	p := reconcileEventPredicate()
+	for _, tt := range []struct {
+		name     string
+		old, new client.Object
+		want     bool
+	}{
+		{"StatefulSet readiness", sts, ready, true},
+		{"StatefulSet rollout revision", sts, rollout, true},
+		{"StatefulSet generation", sts, stsSpec, true},
+		{"StatefulSet metadata only", sts, metadata, false},
+		{"cluster generation", cluster, clusterSpec, true},
+		{"cluster status only", cluster, clusterStatus, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := p.Update(event.UpdateEvent{ObjectOld: tt.old, ObjectNew: tt.new}); got != tt.want {
+				t.Fatalf("Update() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+	if !p.Create(event.CreateEvent{Object: sts}) ||
+		!p.Delete(event.DeleteEvent{Object: sts}) ||
+		!p.Generic(event.GenericEvent{Object: sts}) {
+		t.Fatal("create, delete, and generic events must remain accepted")
+	}
 }
 
 func TestGenerateYAMLRejectsInvalidLogging(t *testing.T) {
