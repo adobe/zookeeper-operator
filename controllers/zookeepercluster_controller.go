@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -531,7 +532,14 @@ func (r *ZookeeperClusterReconciler) reconcilePodDisruptionBudget(instance *zook
 	} else if err != nil {
 		return err
 	}
-	return nil
+	original := foundPdb.DeepCopy()
+	foundPdb.Spec.MinAvailable = nil
+	foundPdb.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
+	foundPdb.Spec.Selector = pdb.Spec.Selector
+	if equality.Semantic.DeepEqual(original.Spec, foundPdb.Spec) {
+		return nil
+	}
+	return r.Client.Patch(context.TODO(), foundPdb, client.MergeFrom(original))
 }
 
 func (r *ZookeeperClusterReconciler) reconcileConfigMap(instance *zookeeperv1beta1.ZookeeperCluster) (err error) {
