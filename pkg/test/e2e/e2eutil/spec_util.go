@@ -14,12 +14,13 @@ import (
 	"os"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // NewDefaultCluster returns a cluster with an empty spec, which will be filled
-// with default values. ZK_IMAGE_REPOSITORY / ZK_IMAGE_TAG override the
-// ZooKeeper image, so the suite can test an image built from the same commit.
+// with default values. ZK_IMAGE_REPOSITORY, ZK_IMAGE_TAG and ZK_IMAGE_PULL_POLICY
+// override the ZooKeeper image, so the suite can test a locally loaded image.
 func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 	cluster := &api.ZookeeperCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -34,6 +35,7 @@ func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 	}
 	cluster.Spec.Image.Repository = os.Getenv("ZK_IMAGE_REPOSITORY")
 	cluster.Spec.Image.Tag = os.Getenv("ZK_IMAGE_TAG")
+	cluster.Spec.Image.PullPolicy = corev1.PullPolicy(os.Getenv("ZK_IMAGE_PULL_POLICY"))
 	return cluster
 }
 
@@ -49,8 +51,6 @@ func NewClusterWithVersion(namespace, version string) *api.ZookeeperCluster {
 
 func NewClusterWithEmptyDir(namespace string) *api.ZookeeperCluster {
 	cluster := NewDefaultCluster(namespace)
-	cluster.Spec = api.ZookeeperClusterSpec{
-		StorageType: "ephemeral",
-	}
+	cluster.Spec.StorageType = "ephemeral"
 	return cluster
 }
