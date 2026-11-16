@@ -63,6 +63,11 @@ jobs:
           fail-on-diff: true
       - name: helm lint
         run: helm lint --strict charts/zookeeper-operator
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test rendered chart contracts
+        run: go test -tags=manifests ./test/manifests -count=1
       - name: Validate rendered manifests with kubeconform
         run: |
           helm template zookeeper-operator charts/zookeeper-operator \
