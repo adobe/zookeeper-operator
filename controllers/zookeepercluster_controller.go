@@ -533,7 +533,14 @@ func (r *ZookeeperClusterReconciler) reconcilePodDisruptionBudget(instance *zook
 	} else if err != nil {
 		return err
 	}
-	return nil
+	original := foundPdb.DeepCopy()
+	foundPdb.Spec.MinAvailable = nil
+	foundPdb.Spec.MaxUnavailable = pdb.Spec.MaxUnavailable
+	foundPdb.Spec.Selector = pdb.Spec.Selector
+	if equality.Semantic.DeepEqual(original.Spec, foundPdb.Spec) {
+		return nil
+	}
+	return r.Client.Patch(context.TODO(), foundPdb, client.MergeFrom(original))
 }
 
 func (r *ZookeeperClusterReconciler) reconcileConfigMap(instance *zookeeperv1beta1.ZookeeperCluster) (err error) {

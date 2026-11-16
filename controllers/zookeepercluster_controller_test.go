@@ -22,8 +22,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -133,6 +137,121 @@ func TestGenerateYAMLProjectsDefaultLogging(t *testing.T) {
 		}
 	}
 	t.Fatal("exported StatefulSet does not project the default Logback config")
+}
+
+func TestPDBReconcilesMaxUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		previous int
+		desired  int32
+		drifted  bool
+	}{
+		{name: "relax", previous: 1, desired: 2},
+		{name: "tighten", previous: 2, desired: 1},
+		{name: "repair spec drift", previous: 1, desired: 1, drifted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, z, pdb := newPDBTestReconciler(t, tc.previous)
+			z.Spec.MaxUnavailableReplicas = tc.desired
+			if tc.drifted {
+				pdb.Spec.MinAvailable = pdb.Spec.MaxUnavailable
+				pdb.Spec.MaxUnavailable = nil
+				pdb.Spec.Selector.MatchLabels["app"] = "other"
+				if err := r.Client.Update(context.Background(), pdb); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := r.reconcilePodDisruptionBudget(z); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Client.Get(context.Background(), client.ObjectKeyFromObject(pdb), pdb); err != nil {
+				t.Fatal(err)
+			}
+			if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != int(tc.desired) {
+				t.Fatalf("maxUnavailable = %v, want %d", pdb.Spec.MaxUnavailable, tc.desired)
+			}
+			if pdb.Spec.MinAvailable != nil || pdb.Spec.Selector.MatchLabels["app"] != "example" {
+				t.Fatalf("PDB retained drifted owned fields: %+v", pdb.Spec)
+			}
+			if pdb.Annotations["external"] != "keep" || pdb.Status.DisruptionsAllowed != 1 ||
+				pdb.Spec.UnhealthyPodEvictionPolicy == nil || *pdb.Spec.UnhealthyPodEvictionPolicy != policyv1.AlwaysAllow {
+				t.Fatalf("reconciliation changed unrelated fields: %+v", pdb)
+			}
+		})
+	}
+}
+
+func TestPDBNoChangeSkipsWrite(t *testing.T) {
+	r, z, _ := newPDBTestReconciler(t, 1)
+	writes := 0
+	r.Client = interceptor.NewClient(r.Client.(client.WithWatch), interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			writes++
+			return c.Update(ctx, obj, opts...)
+		},
+		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+			writes++
+			return c.Patch(ctx, obj, patch, opts...)
+		},
+	})
+	for i := 0; i < 2; i++ {
+		if err := r.reconcilePodDisruptionBudget(z); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if writes != 0 {
+		t.Fatalf("unchanged PDB received %d writes", writes)
+	}
+}
+
+func TestPDBPatchConflictRetries(t *testing.T) {
+	r, z, pdb := newPDBTestReconciler(t, 1)
+	z.Spec.MaxUnavailableReplicas = 2
+	cl := r.Client
+	r.Client = interceptor.NewClient(cl.(client.WithWatch), interceptor.Funcs{
+		Patch: func(context.Context, client.WithWatch, client.Object, client.Patch, ...client.PatchOption) error {
+			return apierrors.NewConflict(schema.GroupResource{Group: "policy", Resource: "poddisruptionbudgets"}, pdb.Name, errors.New("stale writer"))
+		},
+	})
+	if err := r.reconcilePodDisruptionBudget(z); !apierrors.IsConflict(err) {
+		t.Fatalf("expected patch conflict, got %v", err)
+	}
+	r.Client = cl
+	if err := r.reconcilePodDisruptionBudget(z); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.Get(context.Background(), client.ObjectKeyFromObject(pdb), pdb); err != nil {
+		t.Fatal(err)
+	}
+	if pdb.Spec.MaxUnavailable.IntValue() != 2 {
+		t.Fatalf("retry left maxUnavailable = %v, want 2", pdb.Spec.MaxUnavailable)
+	}
+}
+
+func newPDBTestReconciler(t *testing.T, maxUnavailable int) (*ZookeeperClusterReconciler, *v1beta1.ZookeeperCluster, *policyv1.PodDisruptionBudget) {
+	t.Helper()
+	s := runtime.NewScheme()
+	if err := scheme.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1beta1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	z := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default", UID: "ensemble-uid"}}
+	z.Spec.MaxUnavailableReplicas = 1
+	value := intstr.FromInt(maxUnavailable)
+	evictionPolicy := policyv1.AlwaysAllow
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: z.Name, Namespace: z.Namespace, Annotations: map[string]string{"external": "keep"}},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable:             &value,
+			Selector:                   &metav1.LabelSelector{MatchLabels: map[string]string{"app": "example"}},
+			UnhealthyPodEvictionPolicy: &evictionPolicy,
+		},
+		Status: policyv1.PodDisruptionBudgetStatus{DisruptionsAllowed: 1},
+	}
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pdb).WithStatusSubresource(pdb).Build()
+	return &ZookeeperClusterReconciler{Client: cl, Scheme: s}, z, pdb
 }
 
 type MockZookeeperClient struct {
