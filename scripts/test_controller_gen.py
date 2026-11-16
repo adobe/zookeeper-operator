@@ -48,6 +48,9 @@ class ControllerGenTest(unittest.TestCase):
         self.bin.mkdir()
         self.binary = self.bin / "controller-gen"
         self.log = self.root / "generator.log"
+        kustomize = self.bin / "kustomize"
+        kustomize.write_text("#!/bin/sh\n")
+        kustomize.chmod(0o755)
 
     def write_generator(self, version):
         self.binary.write_text(GENERATOR.replace("VERSION", version))
@@ -85,22 +88,20 @@ class ControllerGenTest(unittest.TestCase):
         result = self.run_make(FAIL_INSTALL="1")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_install_failure_is_reported(self):
+    def test_install_failure_prevents_generation(self):
         self.write_generator("v0.19.0")
-        result = self.run_make(FAIL_INSTALL="1")
+        result = self.run_make("generate", FAIL_INSTALL="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("simulated install failure", result.stderr)
+        self.assertFalse(self.log.exists(), "stale generator must not run after an installation failure")
 
     def test_generate_checks_version_before_running_generator(self):
         self.write_generator("v0.19.0")
-        bases = self.root / "config/crd/bases"
-        bases.mkdir(parents=True)
-        (bases / "zookeeper.pravega.io_zookeeperclusters.yaml").write_text("---\n")
         (self.root / "charts/zookeeper-operator/templates").mkdir(parents=True)
         result = self.run_make("generate")
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.log.read_text().splitlines()
-        self.assertTrue(calls[0].startswith("v0.99.0 object"), calls)
+        self.assertTrue(calls, "generate must invoke controller-gen")
         self.assertTrue(all(call.startswith("v0.99.0 ") for call in calls), calls)
 
 

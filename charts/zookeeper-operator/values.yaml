@@ -37,7 +37,7 @@ serviceAccount:
   # imagePullSecrets:
 
 crd:
-  # -- Create zookeeper CRD
+  # -- Manage the ZooKeeper CRD with this Helm release; use false for an externally managed CRD.
   create: true
 
 ## Specifies which namespace(s) the Operator should watch over.

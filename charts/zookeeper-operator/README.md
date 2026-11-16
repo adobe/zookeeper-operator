@@ -34,6 +34,29 @@ $ helm install [RELEASE_NAME] oci://ghcr.io/adobe/helm-charts/zookeeper-operator
 
 This command deploys a zookeeper-operator on the Kubernetes cluster in its default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
 
+## CRD ownership and upgrades
+
+The recommended mode is external CRD ownership: apply the CRD manifest matching
+the operator release first, then add `--set crd.create=false` to each Helm install
+and upgrade. Helm will not create, adopt, update, or delete that CRD.
+
+For chart-managed ownership, leave the existing default `crd.create=true`.
+The chart updates its templated CRD on upgrade and annotates it with
+`helm.sh/resource-policy: keep`, so removing the chart does not delete the CRD
+or its custom resources. Validate schema compatibility before upgrades; retaining
+the CRD is not a guarantee about PVC retention.
+
+For an existing chart-managed release, first upgrade to this chart with
+`crd.create=true`, so `keep` is recorded in the release manifest. Only then
+upgrade again with `crd.create=false` to transfer schema management outside
+Helm. Do not skip the first upgrade, delete the CRD, or strip ownership metadata
+while the release still manages it.
+
+An externally created CRD is not automatically adopted by enabling
+`crd.create=true`. Keep using external mode unless you deliberately migrate
+ownership. Retained CRDs keep their Helm ownership metadata; a different release
+cannot silently take them over.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the zookeeper-operator chart, use the following command:
@@ -42,7 +65,11 @@ To uninstall/delete the zookeeper-operator chart, use the following command:
 $ helm uninstall [RELEASE_NAME]
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+The command removes the release's operator resources. Chart-managed CRDs are
+retained, including their custom resources; externally managed CRDs are untouched.
+Delete a CRD only as an explicit, separate data-removal operation.
+Deleting retained custom resources can still require a running operator to
+complete their finalizers.
 
 ## Configuration
 
@@ -57,7 +84,7 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | additionalVolumes | list | `[]` | Additional volumes required for sidecars |
 | affinity | object | `{}` | Operator pod affinity can be set |
 | annotations | object | `{}` | Pod annotations |
-| crd.create | bool | `true` | Create zookeeper CRD |
+| crd.create | bool | `true` | Manage the ZooKeeper CRD with this Helm release; use false for an externally managed CRD. |
 | disableFinalizer | bool | `false` | Disable finalizer for zookeeper clusters, PVCs clean-up will be skipped |
 | global.imagePullSecrets | list | `[]` | Lists the secrets you need to use to pull zookeeper-operator image from a private registry. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |

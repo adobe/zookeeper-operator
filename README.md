@@ -81,13 +81,17 @@ kubectl create -f https://raw.githubusercontent.com/adobe/zookeeper-operator/mas
 
 
 # Install latest version
-helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --set crd.create=false
 
 # Or install a specific version
-helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --version [VERSION]
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --version [VERSION] --set crd.create=false
 ```
 
 For more detailed configuration options, refer to [this](charts/zookeeper-operator#installing-the-chart).
+
+These commands manage the CRD outside Helm. Apply the CRD manifest matching the
+operator release before upgrading. For chart-managed CRDs and existing-release
+transitions, follow the [CRD ownership contract](charts/zookeeper-operator#crd-ownership-and-upgrades).
 
 #### Manual deployment
 
