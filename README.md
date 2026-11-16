@@ -99,6 +99,14 @@ $ kubectl create -f config/crd/bases
 
 You can choose to enable Zookeeper operator for all namespaces or just for a specific namespace. The example is using the `default` namespace, but feel free to edit the Yaml files and use a different namespace.
 
+The Kustomize bundle (`config/default`) grants its dedicated
+`zookeeper-operator` service account cluster-wide permissions through the generated
+role. Its deployment watches only its own namespace by default. For namespace-only
+authorization, use `default_ns_rbac.yaml` below instead of the Kustomize bundle.
+When changing namespaces in manual manifests, update service-account subjects in
+the bindings as well. Never bind operator roles to the namespace's `default`
+service account.
+
 Create the operator role and role binding.
 
 ```
