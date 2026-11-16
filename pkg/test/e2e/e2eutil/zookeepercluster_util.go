@@ -74,26 +74,52 @@ func UpdateCluster(ctx context.Context, logger logr.Logger, k8client client.Clie
 }
 
 // GetCluster returns the latest ZookeeperCluster CR
-func GetCluster(ctx context.Context, logger logr.Logger, k8client client.Client, z *api.ZookeeperCluster) (*api.ZookeeperCluster, error) {
+func GetCluster(ctx context.Context, _ logr.Logger, k8client client.Client, z *api.ZookeeperCluster) (*api.ZookeeperCluster, error) {
 	zk := &api.ZookeeperCluster{}
 	err := k8client.Get(ctx, types.NamespacedName{Namespace: z.Namespace, Name: z.Name}, zk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain created CR: %w", err)
 	}
-	logger.Info(fmt.Sprintf("zk cluster has ready replicas %v", zk.Status.ReadyReplicas))
 	return zk, nil
+}
+
+func newClusterProgressLogger(logger logr.Logger) func(*api.ZookeeperCluster) {
+	var previous string
+	var lastLogged time.Time
+	return func(cluster *api.ZookeeperCluster) {
+		conditions := make([]string, 0, len(cluster.Status.Conditions))
+		for _, condition := range cluster.Status.Conditions {
+			conditions = append(conditions, fmt.Sprintf("%s=%s reason=%q message=%q",
+				condition.Type, condition.Status, condition.Reason, condition.Message))
+		}
+		fields := []interface{}{
+			"readyReplicas", cluster.Status.ReadyReplicas,
+			"desiredReplicas", cluster.Spec.Replicas,
+			"currentVersion", cluster.Status.CurrentVersion,
+			"reportedTargetVersion", cluster.Status.TargetVersion,
+			"conditions", conditions,
+		}
+		state := fmt.Sprintf("%#v", fields)
+		if state == previous && time.Since(lastLogged) < 30*time.Second {
+			return
+		}
+		logger.Info("cluster progress", fields...)
+		previous, lastLogged = state, time.Now()
+	}
 }
 
 // WaitForClusterToBecomeReady will wait until all cluster pods are ready
 func WaitForClusterToBecomeReady(ctx context.Context, logger logr.Logger, k8client client.Client, z *api.ZookeeperCluster, size int) error {
-	logger.Info(fmt.Sprintf("waiting for cluster pods to become ready: %s", z.Name))
+	logger = logger.WithValues("namespace", z.Namespace, "cluster", z.Name, "operation", "readiness", "expectedReplicas", size)
+	progress := newClusterProgressLogger(logger)
+	logger.Info("waiting for cluster readiness")
 	err := wait.PollUntilContextTimeout(ctx, RetryInterval, ReadyTimeout, true, func(ctx context.Context) (done bool, err error) {
 		cluster, err := GetCluster(ctx, logger, k8client, z)
 		if err != nil {
 			return false, err
 		}
 
-		logger.Info(fmt.Sprintf("waiting for pods to become ready (%d/%d), pods (%v)", cluster.Status.ReadyReplicas, size, cluster.Status.Members.Ready))
+		progress(cluster)
 		_, condition := cluster.Status.GetClusterCondition(api.ClusterConditionPodsReady)
 		if condition != nil && condition.Status == corev1.ConditionTrue && cluster.Status.ReadyReplicas == int32(size) {
 			return true, nil
@@ -104,14 +130,16 @@ func WaitForClusterToBecomeReady(ctx context.Context, logger logr.Logger, k8clie
 	if err != nil {
 		return err
 	}
-	logger.Info(fmt.Sprintf("zookeeper cluster ready: %s", z.Name))
+	logger.Info("cluster ready")
 	return nil
 
 }
 
 // WaitForClusterToUpgrade will wait until all pods are upgraded
 func WaitForClusterToUpgrade(ctx context.Context, logger logr.Logger, k8client client.Client, z *api.ZookeeperCluster, targetVersion string) error {
-	logger.Info(fmt.Sprintf("waiting for cluster to upgrade: %s", z.Name))
+	logger = logger.WithValues("namespace", z.Namespace, "cluster", z.Name, "operation", "upgrade", "targetVersion", targetVersion)
+	progress := newClusterProgressLogger(logger)
+	logger.Info("waiting for cluster upgrade")
 	err := wait.PollUntilContextTimeout(ctx, RetryInterval, UpgradeTimeout, true, func(ctx context.Context) (done bool, err error) {
 		cluster, err := GetCluster(ctx, logger, k8client, z)
 		if err != nil {
@@ -120,6 +148,7 @@ func WaitForClusterToUpgrade(ctx context.Context, logger logr.Logger, k8client c
 
 		_, upgradeCondition := cluster.Status.GetClusterCondition(api.ClusterConditionUpgrading)
 		_, errorCondition := cluster.Status.GetClusterCondition(api.ClusterConditionError)
+		progress(cluster)
 
 		if errorCondition != nil && errorCondition.Status == corev1.ConditionTrue {
 			return false, fmt.Errorf("failed upgrading cluster: [%s] %s", errorCondition.Reason, errorCondition.Message)
@@ -136,7 +165,7 @@ func WaitForClusterToUpgrade(ctx context.Context, logger logr.Logger, k8client c
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("zookeeper cluster upgraded: %s", z.Name))
+	logger.Info("cluster upgraded")
 	return nil
 }
 
