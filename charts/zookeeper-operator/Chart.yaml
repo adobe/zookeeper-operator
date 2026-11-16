@@ -3,6 +3,7 @@ name: zookeeper-operator
 description: Zookeeper Operator Helm chart for Kubernetes
 version: 0.2.15
 appVersion: 0.2.15
+kubeVersion: ">=1.34.0-0"
 keywords:
 - zookeeper
 - storage

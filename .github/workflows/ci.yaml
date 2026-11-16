@@ -55,6 +55,15 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.3.2
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install pinned Kustomize
+        run: |
+          version="$(sed -n 's/^KUSTOMIZE_VERSION ?= //p' Makefile)"
+          GOBIN="${PWD}/bin" go install "sigs.k8s.io/kustomize/kustomize/v5@${version}"
+      - name: Manifest contracts
+        run: go test -tags=manifests ./test/manifests -count=1
       - name: Check values schema json
         uses: losisin/helm-values-schema-json-action@v3
         with:
@@ -65,9 +74,13 @@ jobs:
         run: helm lint --strict charts/zookeeper-operator
       - name: Validate rendered manifests with kubeconform
         run: |
-          helm template zookeeper-operator charts/zookeeper-operator \
-            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
-                -strict -summary -ignore-missing-schemas
+          # kubeconform has no built-in CustomResourceDefinition schema.
+          # This explicit exception does not validate the ZooKeeper custom-resource schema.
+          for version in 1.34.3 1.35.0; do
+            helm template zookeeper-operator charts/zookeeper-operator --kube-version "$version" \
+              | docker run --rm -i ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
+                  -kubernetes-version "$version" -strict -summary -skip CustomResourceDefinition
+          done
 
   operator-image:
     name: operator image

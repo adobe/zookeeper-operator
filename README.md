@@ -48,7 +48,16 @@ The operator itself is built with the [Operator framework](https://github.com/op
 
 ## Requirements
 
-- Access to a Kubernetes v1.15.0+ cluster
+- Access to a Kubernetes **1.34 or newer** cluster.
+- Helm **3.8 or newer** for stable OCI chart installation (CI also checks Helm 4).
+
+The initial compatibility matrix targets Kubernetes **1.34** and **1.35**,
+using kind v0.31.0 with pinned 1.34.3 and 1.35.0 node images. Live matrix
+validation is pending; a configured CI job is not evidence of tested support.
+Newer minors are not automatically tested or guaranteed. Use current security
+patches in production; the pinned CI patches are reproducible test fixtures.
+Kubernetes versions below 1.34 are no longer supported, and the Helm chart
+rejects them. Keep an earlier operator/chart release for older clusters.
 
 ## Usage
 
