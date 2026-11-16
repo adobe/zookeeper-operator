@@ -7,8 +7,13 @@ Installs [Zookeeper Operator](https://github.com/pravega/zookeeper-operator) to 
 This chart bootstraps a [Zookeeper Operator](https://github.com/pravega/zookeeper-operator) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
 ## Prerequisites
-  - Kubernetes 1.15+ with Beta APIs
-  - Helm 3.2.1+
+  - Kubernetes **1.34 or newer**; the chart rejects older versions.
+  - Helm **3.8 or newer** for stable OCI support. CI also checks Helm 4.
+
+Live CI targets Kubernetes **1.34** only, the minimum supported minor, with the
+kind tool and node image pinned in the Makefile and e2e workflow. Later minors
+are not tested or guaranteed. Use current security patches in production.
+For clusters older than 1.34, retain an earlier operator/chart release.
 
 ## Installing the Chart
 

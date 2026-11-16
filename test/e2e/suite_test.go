@@ -13,15 +13,14 @@ package e2e
 import (
 	"context"
 	"github.com/go-logr/logr"
-	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zookeeperv1beta1 "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zookeepercontroller "github.com/pravega/zookeeper-operator/controllers"
+	zk_e2eutil "github.com/pravega/zookeeper-operator/pkg/test/e2e/e2eutil"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -38,11 +37,12 @@ var (
 	testEnv       *envtest.Environment
 	ctx           context.Context
 	cancel        context.CancelFunc
-	testNamespace = "default"
+	testNamespace string
 	logger        logr.Logger
 )
 
 func TestAPIs(t *testing.T) {
+	ctx, cancel = context.WithCancel(t.Context())
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controller e2e Suite")
 }
@@ -50,8 +50,6 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logger = zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true))
 	logf.SetLogger(logger)
-
-	ctx, cancel = context.WithCancel(context.TODO())
 
 	enabled := true
 	By("bootstrapping test environment")
@@ -89,7 +87,6 @@ var _ = BeforeSuite(func() {
 	if os.Getenv("RUN_LOCAL") == "true" {
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
-			Cache:  cache.Options{DefaultNamespaces: map[string]cache.Config{testNamespace: {}}},
 		})
 		Expect(err).ToNot(HaveOccurred())
 
@@ -102,7 +99,7 @@ var _ = BeforeSuite(func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err = k8sManager.Start(ctrl.SetupSignalHandler())
+			err = k8sManager.Start(ctx)
 			Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 		}()
 	}
@@ -121,13 +118,29 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+var _ = BeforeEach(func() {
+	Expect(testNamespace).To(BeEmpty(), "previous scenario namespace cleanup did not complete")
+	var err error
+	testNamespace, err = zk_e2eutil.CreateNamespace(ctx, k8sClient)
+	Expect(err).NotTo(HaveOccurred())
+	By("running scenario in namespace " + testNamespace)
+})
+
 var _ = AfterEach(func() {
-	zkList := &api.ZookeeperClusterList{}
-	listOptions := []client.ListOption{
-		client.InNamespace(testNamespace),
+	if testNamespace == "" {
+		return
 	}
-	Expect(k8sClient.List(ctx, zkList, listOptions...)).NotTo(HaveOccurred())
-	for _, zk := range zkList.Items {
-		Expect(k8sClient.Delete(ctx, &zk)).NotTo(HaveOccurred())
+	if CurrentGinkgoTestDescription().Failed {
+		pods, err := zk_e2eutil.GetNamespacePods(ctx, k8sClient, testNamespace)
+		if err != nil {
+			logger.Error(err, "failed to capture scenario pods", "namespace", testNamespace)
+		} else {
+			for _, pod := range pods {
+				logger.Info("failed scenario pod", "namespace", testNamespace, "name", pod.Name, "status", pod.Status)
+			}
+		}
 	}
+	By("deleting scenario namespace " + testNamespace)
+	Expect(zk_e2eutil.DeleteNamespace(ctx, k8sClient, testNamespace)).NotTo(HaveOccurred())
+	testNamespace = ""
 })

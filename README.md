@@ -31,6 +31,7 @@ The project is currently beta. While no breaking API changes are currently plann
       - [Manual uninstall](#manual-uninstall-1)
     - [The AdminServer](#the-adminserver)
   - [Development](#development)
+    - [API-server integration tests](#api-server-integration-tests)
     - [Update dependencies](#update-dependencies)
     - [Build the operator image](#build-the-operator-image)
     - [Published Docker Images](#published-docker-images)
@@ -48,7 +49,16 @@ The operator itself is built with the [Operator framework](https://github.com/op
 
 ## Requirements
 
-- Access to a Kubernetes v1.15.0+ cluster
+- Access to a Kubernetes **1.34 or newer** cluster.
+- Helm **3.8 or newer** for stable OCI chart installation (CI also checks Helm 4).
+
+Live CI targets Kubernetes **1.34**, the minimum supported minor, using the
+kind version pinned in the Makefile and node image pinned in
+`.github/workflows/e2e.yaml`.
+Newer minors are not tested or guaranteed. Use current security
+patches in production; the pinned CI patches are reproducible test fixtures.
+Kubernetes versions below 1.34 are no longer supported, and the Helm chart
+rejects them. Keep an earlier operator/chart release for older clusters.
 
 ## Usage
 
@@ -452,6 +462,21 @@ The list of available commands are
 
 ## Development
 
+### API-server integration tests
+
+`make test` runs the fast unit suite without Kubernetes binaries.
+Run `make test-envtest` for the opt-in controller API-server tests. This target
+installs the `ENVTEST_TOOL_VERSION` pinned in the Makefile and downloads
+its `ENVTEST_K8S_VERSION` assets into `bin/k8s`.
+Missing or unusable assets fail the target instead of skipping tests.
+The same target gates CI and releases.
+
+The tagged suite verifies status-subresource isolation, stale-update conflicts,
+and deletion finalizers using the repository CRD and isolated namespaces.
+It does not run the operator, a StatefulSet controller, garbage collection, or
+a storage provisioner; full reconciliation and storage behavior still require
+the live kind e2e suite.
+
 ### Update dependencies
 
 Dependabot checks ZooKeeper releases on Maven Central weekly, with a seven-day
@@ -468,7 +493,12 @@ published image. Existing clusters require an explicit image-tag upgrade.
 
 Run `./update-go-deps.sh` to update Go to the latest stable release, Go modules,
 and build-tool pins in the Makefile and CI workflows: kustomize (within v5),
-controller-tools, golangci-lint, Helm, kubeconform and actionlint.
+controller-tools, kind, setup-envtest, golangci-lint, Helm, kubeconform and actionlint.
+It updates kind node-image tags/digests from official kind releases and envtest
+assets within their existing Kubernetes minors; it does not advance the support
+floor or add matrix minors. Node digests are checked against the registry before
+any pins are written. Schema validation derives patch versions from the same
+matrix, so it follows node-image updates automatically.
 CI image tags and digests are updated together;
 Helm versions stay synchronized between CI and releases.
 The Go version in `go.mod` and the Dockerfile's major.minor fallback stay
@@ -488,6 +518,12 @@ can still introduce breaking changes.
 GitHub Actions references, general Docker images and Gradle dependencies remain
 managed by Dependabot. Zizmor uses the default binary version selected by its
 action. Java and ZooKeeper versions are not changed by this script.
+
+The e2e workflow builds source runtime images once, transfers the same images
+to both kind jobs, and runs every scenario serially on each Kubernetes version.
+Test waits check actual pod replacement/readiness rather than sleeping.
+Per-spec timings and full output are retained as version-specific workflow
+artifacts. Only HTTP 429 image-build failures receive bounded retries.
 Test the updater without network access or real dependency upgrades with
 `python3 -B -m unittest discover -s scripts -p 'test_update_deps.py'`.
 

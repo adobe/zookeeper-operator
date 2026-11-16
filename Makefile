@@ -91,10 +91,14 @@ $(LOCALBIN):
 ## Tool Binaries
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+SETUP_ENVTEST = $(LOCALBIN)/setup-envtest
 ## Tool Versions
 # Upgraded to modern stable versions
 KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.23.0
+KIND_VERSION ?= v0.31.0
+ENVTEST_TOOL_VERSION = 5d8467b3065818a3b382d8f6941147a801fd1969
+ENVTEST_K8S_VERSION = 1.34.1
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -170,7 +174,16 @@ build-zk-image-swarm:
 		-f ./docker/Dockerfile-swarm -t $(APP_REPO):$(VERSION)-swarm ./docker
 
 test:
-	go test $$(go list ./... | grep -v /vendor/ | grep -v /test/e2e) -race -coverprofile=coverage.txt -covermode=atomic
+	go test $$(go list ./... | grep -v /vendor/ | grep -v -E '^$(MODULE)/test/e2e(/|$$)') -race -coverprofile=coverage.txt -covermode=atomic
+
+.PHONY: setup-envtest test-envtest
+setup-envtest: $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_TOOL_VERSION)
+
+test-envtest: setup-envtest
+	@assets="$$("$(SETUP_ENVTEST)" use "$(ENVTEST_K8S_VERSION)" --bin-dir "$(LOCALBIN)/k8s" -p path)" && \
+		test -x "$$assets/kube-apiserver" && test -x "$$assets/etcd" && test -x "$$assets/kubectl" && \
+		KUBEBUILDER_ASSETS="$$assets" go test -tags=envtest ./controllers -run '^TestEnvtest' -count=1 -v
 
 test-e2e: test-e2e-remote
 

@@ -18,3 +18,39 @@ patches:
           - name: zookeeper-operator
             image: zookeeper-operator:e2e
             imagePullPolicy: IfNotPresent
+            env:
+            - name: WATCH_NAMESPACE
+              value: ""
+              valueFrom: null
+- target:
+    kind: ClusterRole
+    name: manager-role
+  patch: |-
+    - op: add
+      path: /rules/-
+      value:
+        apiGroups: [zookeeper.pravega.io]
+        resources: [zookeeperclusters]
+        verbs: [get, list, watch, create, update, patch, delete]
+    - op: add
+      path: /rules/-
+      value:
+        apiGroups: [zookeeper.pravega.io]
+        resources: [zookeeperclusters/status]
+        verbs: [get, update, patch]
+    - op: add
+      path: /rules/-
+      value:
+        apiGroups: [zookeeper.pravega.io]
+        resources: [zookeeperclusters/finalizers]
+        verbs: [update]
+- target:
+    kind: ClusterRoleBinding
+    name: manager-rolebinding
+  patch: |-
+    - op: replace
+      path: /subjects
+      value:
+      - kind: ServiceAccount
+        name: zookeeper-operator
+        namespace: default

@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -36,6 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -826,6 +828,16 @@ func (r *ZookeeperClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Pod{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(reconcileEventPredicate()).
 		Complete(r)
+}
+
+func reconcileEventPredicate() predicate.Predicate {
+	return predicate.Or(predicate.GenerationChangedPredicate{}, predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldSTS, oldOK := e.ObjectOld.(*appsv1.StatefulSet)
+			newSTS, newOK := e.ObjectNew.(*appsv1.StatefulSet)
+			return oldOK && newOK && !equality.Semantic.DeepEqual(oldSTS.Status, newSTS.Status)
+		},
+	})
 }
