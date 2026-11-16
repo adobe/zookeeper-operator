@@ -89,7 +89,7 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | global.imagePullSecrets | list | `[]` | Lists the secrets you need to use to pull zookeeper-operator image from a private registry. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | image.repository | string | `"ghcr.io/adobe/zookeeper-operator"` | Image repository |
-| image.tag | string | `"0.2.15"` | Image tag |
+| image.tag | string | `"0.2.15-adobe-20261101"` | Image tag |
 | labels | object | `{}` | Additional labels to be added to resources |
 | metricsBindAddress | string | `"127.0.0.1"` |  |
 | metricsPort | string | `"6000"` |  |
@@ -107,8 +107,10 @@ Nonempty settings now apply to the operator container. Choose a user and
 filesystem policy compatible with your operator image; an arbitrary `runAsUser`
 is not guaranteed to work. Additional sidecars keep their own settings.
 
-Run the chart rendering regression tests with Helm and Go installed:
+Run the chart and deployment rendering regression tests with Helm, Go, and the
+Makefile-pinned Kustomize installed:
 
 ```bash
+make kustomize
 go test -tags=manifests ./test/manifests -count=1
 ```

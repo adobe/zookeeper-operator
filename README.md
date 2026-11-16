@@ -123,6 +123,15 @@ $ kubectl create -f config/rbac/all_ns_rbac.yaml
 
 Deploy the Zookeeper operator.
 
+The checked-in default Kustomize bundle uses the published operator release,
+not a test repository. For a custom build, `make deploy IMG=<image-reference>`
+sets the image override (as before, this updates the local manager
+Kustomization). `TEST_IMAGE` is reserved for explicit test targets;
+`make test-e2e-remote` passes its built image to `deploy` through `IMG`.
+The `config/e2e` overlay instead selects `zookeeper-operator:e2e` with
+`IfNotPresent` for direct loading into kind; it does not change production pull
+policies or require a registry.
+
 ```
 $ kubectl create -f config/manager/manager.yaml
 ```

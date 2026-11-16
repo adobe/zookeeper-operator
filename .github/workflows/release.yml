@@ -277,6 +277,7 @@ jobs:
           sed -i "s/^version:.*/version: \"${TAG}\"/" charts/zookeeper-operator/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: \"${TAG}\"/" charts/zookeeper-operator/Chart.yaml
           sed -i "/^image:/,/^[^ ]/ s/^  tag:.*/  tag: ${TAG}/" charts/zookeeper-operator/values.yaml
+          sed -i "s|image: ghcr.io/adobe/zookeeper-operator:.*|image: ghcr.io/adobe/zookeeper-operator:${TAG}|" config/manager/manager.yaml
       - name: Package, push and sign Helm chart
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

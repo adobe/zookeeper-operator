@@ -60,7 +60,7 @@ manifests: controller-gen
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests kustomize
-	cd config/manager && $(KUSTOMIZE) edit set image pravega/zookeeper-operator=$(TEST_IMAGE)
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/adobe/zookeeper-operator=$(IMG)
 	$(KUSTOMIZE) build config/default | kubectl apply --server-side -f -
 
 
@@ -103,7 +103,7 @@ KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/k
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+	test -s "$(KUSTOMIZE)" || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
 .PHONY: controller-gen
 controller-gen: $(LOCALBIN) ## Install controller-gen locally at the configured version.
 	test -x "$(CONTROLLER_GEN)" && \
@@ -191,7 +191,7 @@ test-e2e-remote:
 	make test-login
 	docker build . -t $(TEST_IMAGE)
 	docker push $(TEST_IMAGE)
-	make deploy
+	make deploy IMG="$(TEST_IMAGE)"
 	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v
 	make undeploy
 

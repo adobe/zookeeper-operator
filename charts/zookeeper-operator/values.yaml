@@ -9,7 +9,7 @@ global:
 
 image:
   # -- Image tag
-  tag: 0.2.15
+  tag: 0.2.15-adobe-20261101
   # -- Image repository
   repository: ghcr.io/adobe/zookeeper-operator
   # -- Image pull policy
