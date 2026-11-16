@@ -5,11 +5,14 @@ package e2eutil
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +21,104 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestClusterProgressLogsChangesAndHeartbeats(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var entries []string
+		logger := funcr.NewJSON(func(line string) { entries = append(entries, line) }, funcr.Options{})
+		progress := newClusterProgressLogger(logger)
+		cluster := &api.ZookeeperCluster{}
+		progress(cluster)
+		progress(cluster)
+		if len(entries) != 1 {
+			t.Fatalf("unchanged polls produced %d logs, want 1", len(entries))
+		}
+		cluster.Status.ReadyReplicas = 1
+		progress(cluster)
+		if len(entries) != 2 {
+			t.Fatal("replica progress did not log immediately")
+		}
+		time.Sleep(29 * time.Second)
+		progress(cluster)
+		if len(entries) != 2 {
+			t.Fatal("unchanged state logged before the heartbeat")
+		}
+		time.Sleep(time.Second)
+		progress(cluster)
+		if len(entries) != 3 {
+			t.Fatal("unchanged state did not produce a heartbeat")
+		}
+		cluster.Status.Conditions = []api.ClusterCondition{
+			{Type: api.ClusterConditionUpgrading, Status: corev1.ConditionTrue, Reason: "RollingUpdate"},
+		}
+		progress(cluster)
+		if len(entries) != 4 {
+			t.Fatal("condition change did not log immediately")
+		}
+		cluster.Status.Conditions[0].LastUpdateTime = "later"
+		progress(cluster)
+		if len(entries) != 4 {
+			t.Fatal("timestamp-only condition change produced noise")
+		}
+	})
+}
+
+func TestWaitProgressIdentifiesOperationAndSuppressesUnchangedPolls(t *testing.T) {
+	setWaitDurations(t, time.Millisecond)
+	cluster := &api.ZookeeperCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "zk2", Namespace: "scenario"},
+		Spec:       api.ZookeeperClusterSpec{Replicas: 1},
+		Status: api.ZookeeperClusterStatus{
+			ReadyReplicas:  1,
+			CurrentVersion: "old",
+			Conditions: []api.ClusterCondition{
+				{Type: api.ClusterConditionPodsReady, Status: corev1.ConditionFalse, Reason: "Starting"},
+				{Type: api.ClusterConditionUpgrading, Status: corev1.ConditionTrue, Reason: "RollingUpdate"},
+			},
+		},
+	}
+	for _, operation := range []string{"readiness", "upgrade"} {
+		t.Run(operation, func(t *testing.T) {
+			var progress []map[string]interface{}
+			logger := funcr.NewJSON(func(line string) {
+				var entry map[string]interface{}
+				if err := json.Unmarshal([]byte(line), &entry); err != nil {
+					t.Fatal(err)
+				}
+				if entry["namespace"] != "scenario" || entry["cluster"] != "zk2" {
+					t.Errorf("wait log has no cluster identity: %s", line)
+				}
+				if entry["msg"] == "cluster progress" {
+					progress = append(progress, entry)
+				}
+			}, funcr.Options{})
+			c := waitTestClient(t, cluster)
+			var err error
+			if operation == "readiness" {
+				err = WaitForClusterToBecomeReady(t.Context(), logger, c, cluster, 1)
+			} else {
+				err = WaitForClusterToUpgrade(t.Context(), logger, c, cluster, "new")
+			}
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("expected unfinished operation to time out: %v", err)
+			}
+			if len(progress) != 1 {
+				t.Fatalf("got %d progress logs for unchanged polling state, want 1", len(progress))
+			}
+			entry := progress[0]
+			if entry["operation"] != operation || entry["readyReplicas"] != float64(1) ||
+				entry["currentVersion"] != "old" || entry["conditions"] == nil {
+				t.Fatalf("progress omitted the operation or actual cluster state: %v", entry)
+			}
+			if operation == "readiness" && entry["expectedReplicas"] != float64(1) {
+				t.Fatalf("readiness progress omitted the expected count: %v", entry)
+			}
+			if operation == "upgrade" && entry["targetVersion"] != "new" {
+				t.Fatalf("upgrade progress omitted the requested version: %v", entry)
+			}
+		})
+	}
+}
 
 func TestWaitsCheckCompletedOperationsImmediately(t *testing.T) {
 	setWaitDurations(t, time.Hour)
