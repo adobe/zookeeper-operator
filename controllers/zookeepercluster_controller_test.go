@@ -469,6 +469,93 @@ func newFinalizerTestReconciler(t *testing.T) (*ZookeeperClusterReconciler, *v1b
 	return &ZookeeperClusterReconciler{Client: cl, Scheme: s, Log: log}, z, pvc
 }
 
+func TestScaleMetadataFailureDoesNotChangeReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		current, desired int32
+	}{
+		{name: "up", current: 3, desired: 5},
+		{name: "down", current: 5, desired: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, z, sts := newScaleMetadataTestReconciler(t, tc.current)
+			z.Spec.Replicas = tc.desired
+			metadataErr := errors.New("metadata unavailable")
+			fault := &scaleMetadataClient{updateErr: metadataErr}
+			r.ZkClient = fault
+			if err := r.reconcileStatefulSet(z); err == nil {
+				t.Error("metadata failure did not stop reconciliation")
+			}
+			if err := r.Client.Get(context.Background(), client.ObjectKeyFromObject(sts), sts); err != nil {
+				t.Fatal(err)
+			}
+			if *sts.Spec.Replicas != tc.current {
+				t.Fatalf("replicas after metadata failure = %d, want %d", *sts.Spec.Replicas, tc.current)
+			}
+			fault.updateErr = nil
+			if err := r.reconcileStatefulSet(z); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Client.Get(context.Background(), client.ObjectKeyFromObject(sts), sts); err != nil {
+				t.Fatal(err)
+			}
+			if *sts.Spec.Replicas != tc.desired {
+				t.Fatalf("replicas after retry = %d, want %d", *sts.Spec.Replicas, tc.desired)
+			}
+		})
+	}
+}
+
+func TestScaleMetadataStatefulSetConflictRetries(t *testing.T) {
+	r, z, sts := newScaleMetadataTestReconciler(t, 3)
+	z.Spec.Replicas = 5
+	cl := r.Client
+	r.Client = interceptor.NewClient(cl.(client.WithWatch), interceptor.Funcs{
+		Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error {
+			return apierrors.NewConflict(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, sts.Name, errors.New("stale writer"))
+		},
+	})
+	if err := r.reconcileStatefulSet(z); !apierrors.IsConflict(err) {
+		t.Fatalf("expected StatefulSet conflict, got %v", err)
+	}
+	r.Client = cl
+	if err := r.reconcileStatefulSet(z); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.Get(context.Background(), client.ObjectKeyFromObject(sts), sts); err != nil {
+		t.Fatal(err)
+	}
+	if *sts.Spec.Replicas != 5 {
+		t.Fatalf("replicas after retry = %d, want 5", *sts.Spec.Replicas)
+	}
+}
+
+func newScaleMetadataTestReconciler(t *testing.T, replicas int32) (*ZookeeperClusterReconciler, *v1beta1.ZookeeperCluster, *appsv1.StatefulSet) {
+	t.Helper()
+	s := runtime.NewScheme()
+	if err := scheme.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1beta1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	z := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default", UID: "metadata-test"}}
+	z.WithDefaults()
+	z.Spec.Replicas = replicas
+	sts := zk.MakeStatefulSet(z)
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(z, sts).WithStatusSubresource(z, sts).Build()
+	return &ZookeeperClusterReconciler{Client: cl, Scheme: s, ZkClient: &MockZookeeperClient{}, Log: log}, z, sts
+}
+
+type scaleMetadataClient struct {
+	MockZookeeperClient
+	updateErr error
+}
+
+func (c *scaleMetadataClient) UpdateNode(string, string, int32) error {
+	return c.updateErr
+}
+
 type MockZookeeperClient struct {
 	// dummy struct
 }

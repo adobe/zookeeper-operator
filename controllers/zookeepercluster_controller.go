@@ -284,7 +284,9 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(instance *zookeeperv1b
 
 			data := "CLUSTER_SIZE=" + strconv.Itoa(int(newSTSSize))
 			r.Log.Info("Updating Cluster Size.", "New Data:", data, "Version", version)
-			r.ZkClient.UpdateNode(path, data, version)
+			if err := r.ZkClient.UpdateNode(path, data, version); err != nil {
+				return fmt.Errorf("error updating cluster size in znode %s: %w", path, err)
+			}
 		}
 		err = r.updateStatefulSet(instance, foundSts, sts)
 		if err != nil {

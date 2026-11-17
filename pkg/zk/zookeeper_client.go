@@ -27,8 +27,15 @@ type ZookeeperClient interface {
 	Close()
 }
 
+type zookeeperConnection interface {
+	Create(string, []byte, int32, []zk.ACL) (string, error)
+	Exists(string) (bool, *zk.Stat, error)
+	Set(string, []byte, int32) (*zk.Stat, error)
+	Close()
+}
+
 type DefaultZookeeperClient struct {
-	conn *zk.Conn
+	conn zookeeperConnection
 }
 
 func (client *DefaultZookeeperClient) Connect(zkUri string) (err error) {
@@ -47,14 +54,29 @@ func (client *DefaultZookeeperClient) CreateNode(zoo *v1beta1.ZookeeperCluster, 
 	var parentPath string
 	for i := 1; i < pathLength-1; i++ {
 		parentPath += "/" + paths[i]
-		if _, err := client.conn.Create(parentPath, nil, 0, zk.WorldACL(zk.PermAll)); err != nil {
-			return fmt.Errorf("Error creating parent zkNode: %s: %v", parentPath, err)
+		if err := client.createNodeIfAbsent(parentPath, nil); err != nil {
+			return fmt.Errorf("error creating parent zkNode: %s: %w", parentPath, err)
 		}
 	}
 	data := "CLUSTER_SIZE=" + strconv.Itoa(int(zoo.Spec.Replicas))
 	childNode := parentPath + "/" + paths[pathLength-1]
-	if _, err := client.conn.Create(childNode, []byte(data), 0, zk.WorldACL(zk.PermAll)); err != nil {
-		return fmt.Errorf("Error creating sub zkNode: %s: %v", childNode, err)
+	if err := client.createNodeIfAbsent(childNode, []byte(data)); err != nil {
+		return fmt.Errorf("error creating sub zkNode: %s: %w", childNode, err)
+	}
+	return nil
+}
+
+func (client *DefaultZookeeperClient) createNodeIfAbsent(path string, data []byte) error {
+	_, err := client.conn.Create(path, data, 0, zk.WorldACL(zk.PermAll))
+	if err != zk.ErrNodeExists {
+		return err
+	}
+	exists, _, err := client.conn.Exists(path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return zk.ErrNoNode
 	}
 	return nil
 }
