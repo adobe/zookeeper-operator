@@ -170,6 +170,14 @@ func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 	name := "zk-metadata-" + suffix
 	const image = "zookeeper:3.9.4@sha256:dfa9ba46d14bd52bcb3c1dac3ba91f179cf4cebf7ee576e1c2df09c68fc1d30d"
 	t.Cleanup(func() {
+		if t.Failed() {
+			for _, args := range [][]string{{"inspect", "--format", "{{json .State}}", name}, {"logs", "--tail", "100", name}} {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				output, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
+				cancel()
+				t.Logf("docker %s: %v\n%s", strings.Join(args, " "), err, output)
+			}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		output, err := exec.CommandContext(ctx, "docker", "rm", "--force", "--volumes", name).CombinedOutput()
