@@ -13,6 +13,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strconv"
@@ -677,6 +678,194 @@ func (c *cancellationSessionClient) Connect(ctx context.Context, _ string) error
 }
 
 func (c *cancellationSessionClient) Close() { close(c.closed) }
+
+func TestResourceWriteGuards(t *testing.T) {
+	r, z, _ := newScaleMetadataTestReconciler(t, 1)
+	exerciseResourceWriteGuards(t, r.Client.(client.WithWatch), z)
+}
+
+func exerciseResourceWriteGuards(t *testing.T, cl client.WithWatch, z *v1beta1.ZookeeperCluster) {
+	t.Helper()
+	ctx := t.Context()
+	z.Spec.Pod.ServiceAccountName = "example-account"
+	z.Spec.Pod.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "old-secret"}}
+	if err := cl.Update(ctx, z); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		resource  client.Object
+		reconcile func(*ZookeeperClusterReconciler, context.Context, *v1beta1.ZookeeperCluster) error
+	}{
+		{"ConfigMap", &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: z.ConfigMapName(), Namespace: z.Namespace}}, (*ZookeeperClusterReconciler).reconcileConfigMap},
+		{"ServiceAccount", &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: z.Spec.Pod.ServiceAccountName, Namespace: z.Namespace}}, (*ZookeeperClusterReconciler).reconcileStatefulSet},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &ZookeeperClusterReconciler{Client: cl, APIReader: cl, Scheme: cl.Scheme(), NewZkClient: func() zk.ZookeeperClient { return &MockZookeeperClient{} }, Log: log}
+			if err := tc.reconcile(r, ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(tc.resource), tc.resource); err != nil {
+				t.Fatal(err)
+			}
+			tc.resource.SetAnnotations(map[string]string{"external": "keep"})
+			if err := cl.Update(ctx, tc.resource); err != nil {
+				t.Fatal(err)
+			}
+			t.Run("unchanged", func(t *testing.T) {
+				r.Client = rejectResourceWrites(cl, tc.resource)
+				defer func() { r.Client = cl }()
+				for range 2 {
+					if err := tc.reconcile(r, ctx, z); err != nil {
+						t.Fatal(err)
+					}
+				}
+			})
+			t.Run("change and conflict retry", func(t *testing.T) {
+				switch tc.resource.(type) {
+				case *corev1.ConfigMap:
+					z.Spec.Conf.TickTime = 4000
+				case *corev1.ServiceAccount:
+					z.Spec.Pod.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "new-secret"}}
+				}
+				if err := cl.Update(ctx, z); err != nil {
+					t.Fatal(err)
+				}
+				concurrentWrite := func(ctx context.Context, c client.WithWatch, obj client.Object) error {
+					if reflect.TypeOf(obj) == reflect.TypeOf(tc.resource) {
+						if err := c.Get(ctx, client.ObjectKeyFromObject(tc.resource), tc.resource); err != nil {
+							return err
+						}
+						tc.resource.GetAnnotations()["external"] = "concurrent"
+						return c.Update(ctx, tc.resource)
+					}
+					return nil
+				}
+				r.Client = interceptor.NewClient(cl, interceptor.Funcs{
+					Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+						if err := concurrentWrite(ctx, c, obj); err != nil {
+							return err
+						}
+						return c.Update(ctx, obj, opts...)
+					},
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						if err := concurrentWrite(ctx, c, obj); err != nil {
+							return err
+						}
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+				})
+				defer func() { r.Client = cl }()
+				if err := tc.reconcile(r, ctx, z); !apierrors.IsConflict(err) {
+					t.Fatalf("stale write must conflict, got %v", err)
+				}
+				r.Client = cl
+				if err := tc.reconcile(r, ctx, z); err != nil {
+					t.Fatal(err)
+				}
+				if err := cl.Get(ctx, client.ObjectKeyFromObject(tc.resource), tc.resource); err != nil {
+					t.Fatal(err)
+				}
+				if tc.resource.GetAnnotations()["external"] != "concurrent" {
+					t.Fatal("retry overwrote the concurrent annotation")
+				}
+				switch resource := tc.resource.(type) {
+				case *corev1.ConfigMap:
+					if !strings.Contains(resource.Data["zoo.cfg"], "tickTime=4000\n") {
+						t.Fatal("changed configuration did not reach the ConfigMap")
+					}
+				case *corev1.ServiceAccount:
+					if len(resource.ImagePullSecrets) != 1 || resource.ImagePullSecrets[0].Name != "new-secret" {
+						t.Fatalf("imagePullSecrets were not updated: %v", resource.ImagePullSecrets)
+					}
+				}
+			})
+			t.Run("owned field removal", func(t *testing.T) {
+				switch resource := tc.resource.(type) {
+				case *corev1.ConfigMap:
+					resource.BinaryData = map[string][]byte{"obsolete": []byte("old")}
+					if err := cl.Update(ctx, resource); err != nil {
+						t.Fatal(err)
+					}
+				case *corev1.ServiceAccount:
+					z.Spec.Pod.ImagePullSecrets = nil
+					if err := cl.Update(ctx, z); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := tc.reconcile(r, ctx, z); err != nil {
+					t.Fatal(err)
+				}
+				if err := cl.Get(ctx, client.ObjectKeyFromObject(tc.resource), tc.resource); err != nil {
+					t.Fatal(err)
+				}
+				switch resource := tc.resource.(type) {
+				case *corev1.ConfigMap:
+					if len(resource.BinaryData) != 0 {
+						t.Fatal("obsolete binary data was retained")
+					}
+				case *corev1.ServiceAccount:
+					if len(resource.ImagePullSecrets) != 0 {
+						t.Fatal("removed imagePullSecrets were retained")
+					}
+				}
+				r.Client = rejectResourceWrites(cl, tc.resource)
+				defer func() { r.Client = cl }()
+				if err := tc.reconcile(r, ctx, z); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
+func TestServiceAccountNoChangeStillScalesStatefulSet(t *testing.T) {
+	r, z, sts := newScaleMetadataTestReconciler(t, 3)
+	z.Spec.Pod.ServiceAccountName = "example-account"
+	if err := r.Client.Update(t.Context(), z); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.reconcileStatefulSet(t.Context(), z); err != nil {
+		t.Fatal(err)
+	}
+	z.Spec.Replicas = 5
+	if err := r.Client.Update(t.Context(), z); err != nil {
+		t.Fatal(err)
+	}
+	r.Client = rejectResourceWrites(r.Client.(client.WithWatch), &corev1.ServiceAccount{})
+	if err := r.reconcileStatefulSet(t.Context(), z); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Client.Get(t.Context(), client.ObjectKeyFromObject(sts), sts); err != nil {
+		t.Fatal(err)
+	}
+	if *sts.Spec.Replicas != 5 {
+		t.Fatalf("unchanged ServiceAccount stopped StatefulSet scaling: replicas=%d", *sts.Spec.Replicas)
+	}
+}
+
+func rejectResourceWrites(cl client.WithWatch, resource client.Object) client.WithWatch {
+	reject := func(obj client.Object) error {
+		if reflect.TypeOf(obj) == reflect.TypeOf(resource) {
+			return fmt.Errorf("unchanged %T/%s received a write", obj, obj.GetName())
+		}
+		return nil
+	}
+	return interceptor.NewClient(cl, interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			if err := reject(obj); err != nil {
+				return err
+			}
+			return c.Update(ctx, obj, opts...)
+		},
+		Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+			if err := reject(obj); err != nil {
+				return err
+			}
+			return c.Patch(ctx, obj, patch, opts...)
+		},
+	})
+}
 
 func TestScaleMetadataStatefulSetConflictRetries(t *testing.T) {
 	r, z, sts := newScaleMetadataTestReconciler(t, 3)
