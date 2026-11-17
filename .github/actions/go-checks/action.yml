@@ -21,7 +21,11 @@ runs:
       run: go vet ./...
     - name: Regenerate code, CRDs and the Helm chart CRD
       shell: bash
-      run: make controller-gen generate
+      run: |
+        mkdir -p bin
+        version="$(awk '/^KUSTOMIZE_VERSION[[:space:]]*\?=/{print $3}' Makefile)"
+        GOBIN="$PWD/bin" go install "sigs.k8s.io/kustomize/kustomize/v5@${version}"
+        make controller-gen generate
     - name: Fail on generated file drift
       shell: bash
       run: |

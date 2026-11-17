@@ -81,13 +81,17 @@ kubectl create -f https://raw.githubusercontent.com/adobe/zookeeper-operator/mas
 
 
 # Install latest version
-helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --set crd.create=false
 
 # Or install a specific version
-helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --version [VERSION]
+helm install zookeeper-operator oci://ghcr.io/adobe/helm-charts/zookeeper-operator --version [VERSION] --set crd.create=false
 ```
 
 For more detailed configuration options, refer to [this](charts/zookeeper-operator#installing-the-chart).
+
+These commands manage the CRD outside Helm. Apply the CRD manifest matching the
+operator release before upgrading. For chart-managed CRDs and existing-release
+transitions, follow the [CRD ownership contract](charts/zookeeper-operator#crd-ownership-and-upgrades).
 
 #### Manual deployment
 
@@ -98,6 +102,14 @@ $ kubectl create -f config/crd/bases
 ```
 
 You can choose to enable Zookeeper operator for all namespaces or just for a specific namespace. The example is using the `default` namespace, but feel free to edit the Yaml files and use a different namespace.
+
+The Kustomize bundle (`config/default`) grants its dedicated
+`zookeeper-operator` service account cluster-wide permissions through the generated
+role. Its deployment watches only its own namespace by default. For namespace-only
+authorization, use `default_ns_rbac.yaml` below instead of the Kustomize bundle.
+When changing namespaces in manual manifests, update service-account subjects in
+the bindings as well. Never bind operator roles to the namespace's `default`
+service account.
 
 Create the operator role and role binding.
 
@@ -110,6 +122,15 @@ $ kubectl create -f config/rbac/all_ns_rbac.yaml
 ```
 
 Deploy the Zookeeper operator.
+
+The checked-in default Kustomize bundle uses the published operator release,
+not a test repository. For a custom build, `make deploy IMG=<image-reference>`
+sets the image override (as before, this updates the local manager
+Kustomization). `TEST_IMAGE` is reserved for explicit test targets;
+`make test-e2e-remote` passes its built image to `deploy` through `IMG`.
+The `config/e2e` overlay instead selects `zookeeper-operator:e2e` with
+`IfNotPresent` for direct loading into kind; it does not change production pull
+policies or require a registry.
 
 ```
 $ kubectl create -f config/manager/manager.yaml

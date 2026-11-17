@@ -60,7 +60,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - zookeeper.pravega.io.zookeeper.pravega.io
+  - zookeeper.pravega.io
   resources:
   - zookeeperclusters
   verbs:
@@ -72,7 +72,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - zookeeper.pravega.io.zookeeper.pravega.io
+  - zookeeper.pravega.io
   resources:
   - zookeeperclusters/status
   verbs:
