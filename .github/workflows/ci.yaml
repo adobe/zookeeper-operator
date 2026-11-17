@@ -25,6 +25,20 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/go-checks
 
+  metadata:
+    name: ZooKeeper metadata integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Retry-safe metadata with disposable ZooKeeper
+        run: go test -tags=zkintegration ./pkg/zk -run '^TestMetadataCreate' -count=1 -timeout=4m -v
+
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest
