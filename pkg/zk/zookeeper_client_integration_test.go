@@ -162,13 +162,20 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 
 func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "../../scripts/zookeeper-version.sh").CombinedOutput()
+	if err != nil {
+		t.Fatalf("read project ZooKeeper version: %v\n%s", err, output)
+	}
+	image := "zookeeper:" + strings.TrimSpace(string(output))
+	t.Logf("using ZooKeeper image %s", image)
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		t.Fatal(err)
 	}
 	suffix := fmt.Sprintf("%x", id)
 	name := "zk-metadata-" + suffix
-	const image = "zookeeper:3.9.4@sha256:dfa9ba46d14bd52bcb3c1dac3ba91f179cf4cebf7ee576e1c2df09c68fc1d30d"
 	t.Cleanup(func() {
 		if t.Failed() {
 			for _, args := range [][]string{{"inspect", "--format", "{{json .State}}", name}, {"logs", "--tail", "100", name}} {
@@ -185,9 +192,7 @@ func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 			t.Errorf("remove owned ZooKeeper container: %v\n%s", err, output)
 		}
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	output, err := exec.CommandContext(ctx, "docker", "run", "--detach", "--name", name,
+	output, err = exec.CommandContext(ctx, "docker", "run", "--detach", "--name", name,
 		"--publish", "127.0.0.1::2181", "--memory", "512m", "--cpus", "1",
 		"--env", "JVMFLAGS=-Xms32m -Xmx128m", image).CombinedOutput()
 	if err != nil {
