@@ -101,7 +101,7 @@ class ControllerGenTest(unittest.TestCase):
         result = self.run_make("generate")
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.log.read_text().splitlines()
-        self.assertTrue(calls, "generate must invoke controller-gen")
+        self.assertEqual(calls[0], "v0.99.0 object paths=./...")
         self.assertTrue(all(call.startswith("v0.99.0 ") for call in calls), calls)
 
 
