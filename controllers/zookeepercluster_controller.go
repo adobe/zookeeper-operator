@@ -93,11 +93,10 @@ func (r *ZookeeperClusterReconciler) Reconcile(ctx context.Context, request ctrl
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	if !instance.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, r.reconcileFinalizers(instance)
+	}
 	if err := instance.Spec.ValidateLogging(); err != nil {
-		if !instance.DeletionTimestamp.IsZero() {
-			instance.WithDefaults()
-			return reconcile.Result{}, r.reconcileFinalizers(instance)
-		}
 		return reconcile.Result{}, err
 	}
 	changed := instance.WithDefaults()
@@ -730,10 +729,10 @@ func (r *ZookeeperClusterReconciler) yamlConfigMap(instance *zookeeperv1beta1.Zo
 }
 
 func (r *ZookeeperClusterReconciler) reconcileFinalizers(instance *zookeeperv1beta1.ZookeeperCluster) (err error) {
-	if instance.Spec.Persistence != nil && instance.Spec.Persistence.VolumeReclaimPolicy != zookeeperv1beta1.VolumeReclaimPolicyDelete {
-		return nil
-	}
 	if instance.DeletionTimestamp.IsZero() {
+		if instance.Spec.Persistence != nil && instance.Spec.Persistence.VolumeReclaimPolicy != zookeeperv1beta1.VolumeReclaimPolicyDelete {
+			return nil
+		}
 		if !utils.ContainsString(instance.ObjectMeta.Finalizers, utils.ZkFinalizer) && !config.DisableFinalizer {
 			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, utils.ZkFinalizer)
 			if err = r.Client.Update(context.TODO(), instance); err != nil {
@@ -741,15 +740,16 @@ func (r *ZookeeperClusterReconciler) reconcileFinalizers(instance *zookeeperv1be
 			}
 		}
 		return r.cleanupOrphanPVCs(instance)
-	} else {
-		if utils.ContainsString(instance.ObjectMeta.Finalizers, utils.ZkFinalizer) {
+	}
+	if utils.ContainsString(instance.Finalizers, utils.ZkFinalizer) {
+		if instance.Spec.Persistence != nil && instance.Spec.Persistence.VolumeReclaimPolicy == zookeeperv1beta1.VolumeReclaimPolicyDelete {
 			if err = r.cleanUpAllPVCs(instance); err != nil {
 				return err
 			}
-			instance.ObjectMeta.Finalizers = utils.RemoveString(instance.ObjectMeta.Finalizers, utils.ZkFinalizer)
-			if err = r.Client.Update(context.TODO(), instance); err != nil {
-				return err
-			}
+		}
+		instance.Finalizers = utils.RemoveString(instance.Finalizers, utils.ZkFinalizer)
+		if err = r.Client.Update(context.TODO(), instance); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -780,7 +780,9 @@ func (r *ZookeeperClusterReconciler) cleanupOrphanPVCs(instance *zookeeperv1beta
 			for _, pvcItem := range pvcList.Items {
 				// delete only Orphan PVCs
 				if utils.IsPVCOrphan(pvcItem.Name, instance.Spec.Replicas) {
-					r.deletePVC(pvcItem)
+					if err := r.deletePVC(pvcItem); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -807,12 +809,14 @@ func (r *ZookeeperClusterReconciler) cleanUpAllPVCs(instance *zookeeperv1beta1.Z
 		return err
 	}
 	for _, pvcItem := range pvcList.Items {
-		r.deletePVC(pvcItem)
+		if err := r.deletePVC(pvcItem); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (r *ZookeeperClusterReconciler) deletePVC(pvcItem corev1.PersistentVolumeClaim) {
+func (r *ZookeeperClusterReconciler) deletePVC(pvcItem corev1.PersistentVolumeClaim) error {
 	pvcDelete := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pvcItem.Name,
@@ -820,10 +824,11 @@ func (r *ZookeeperClusterReconciler) deletePVC(pvcItem corev1.PersistentVolumeCl
 		},
 	}
 	r.Log.Info("Deleting PVC", "With Name", pvcItem.Name)
-	err := r.Client.Delete(context.TODO(), pvcDelete)
+	err := client.IgnoreNotFound(r.Client.Delete(context.TODO(), pvcDelete))
 	if err != nil {
-		r.Log.Error(err, "Error deleteing PVC.", "Name", pvcDelete.Name)
+		r.Log.Error(err, "Error deleting PVC.", "Name", pvcDelete.Name)
 	}
+	return err
 }
 
 func (r *ZookeeperClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {

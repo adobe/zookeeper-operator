@@ -14,6 +14,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -252,6 +254,219 @@ func newPDBTestReconciler(t *testing.T, maxUnavailable int) (*ZookeeperClusterRe
 	}
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pdb).WithStatusSubresource(pdb).Build()
 	return &ZookeeperClusterReconciler{Client: cl, Scheme: s}, z, pdb
+}
+
+func TestFinalizerRetainPreservesPVCs(t *testing.T) {
+	for _, foreignFinalizer := range []bool{false, true} {
+		t.Run(strconv.FormatBool(foreignFinalizer), func(t *testing.T) {
+			r, z, pvc := newFinalizerTestReconciler(t)
+			ctx := context.Background()
+			if foreignFinalizer {
+				z.Finalizers = append(z.Finalizers, "other.example/hold")
+			}
+			z.Spec.Persistence.VolumeReclaimPolicy = v1beta1.VolumeReclaimPolicyRetain
+			if err := r.Client.Update(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Client.Delete(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(z)}); err != nil {
+				t.Fatal(err)
+			}
+			err := r.Client.Get(ctx, client.ObjectKeyFromObject(z), z)
+			if foreignFinalizer {
+				if err != nil || len(z.Finalizers) != 1 || z.Finalizers[0] != "other.example/hold" {
+					t.Fatalf("unrelated finalizer must survive: %v, %v", z.Finalizers, err)
+				}
+			} else if !apierrors.IsNotFound(err) {
+				t.Fatalf("retained cluster still has finalizers %v: %v", z.Finalizers, err)
+			}
+			if err := r.Client.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil || !pvc.DeletionTimestamp.IsZero() {
+				t.Fatalf("Retain must leave the PVC untouched: %v", err)
+			}
+		})
+	}
+}
+
+func TestFinalizerDeleteFailureRetainsFinalizer(t *testing.T) {
+	for _, deleteErr := range []error{
+		apierrors.NewForbidden(schema.GroupResource{Resource: "persistentvolumeclaims"}, "data-example-0", errors.New("denied")),
+		errors.New("temporary API failure"),
+	} {
+		t.Run(deleteErr.Error(), func(t *testing.T) {
+			r, z, pvc := newFinalizerTestReconciler(t)
+			ctx := context.Background()
+			if err := r.Client.Delete(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			cl := r.Client
+			r.Client = interceptor.NewClient(cl.(client.WithWatch), interceptor.Funcs{
+				Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+					if _, ok := obj.(*corev1.PersistentVolumeClaim); ok {
+						return deleteErr
+					}
+					return c.Delete(ctx, obj, opts...)
+				},
+			})
+			req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(z)}
+			if _, err := r.Reconcile(ctx, req); !errors.Is(err, deleteErr) {
+				t.Fatalf("cleanup error = %v, want %v", err, deleteErr)
+			}
+			if err := cl.Get(ctx, req.NamespacedName, z); err != nil || !utils.ContainsString(z.Finalizers, utils.ZkFinalizer) {
+				t.Fatalf("failed cleanup lost its finalizer: %v, %v", z.Finalizers, err)
+			}
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil {
+				t.Fatal(err)
+			}
+			r.Client = cl
+			if _, err := r.Reconcile(ctx, req); err != nil {
+				t.Fatal(err)
+			}
+			if err := cl.Get(ctx, req.NamespacedName, z); !apierrors.IsNotFound(err) {
+				t.Fatalf("successful retry did not release cluster finalizer: %v", err)
+			}
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); !apierrors.IsNotFound(err) {
+				t.Fatalf("successful retry did not delete PVC: %v", err)
+			}
+		})
+	}
+}
+
+func TestFinalizerDeletionSkipsNormalReconciliation(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		operatorFinalizer bool
+		defaulted         bool
+	}{
+		{name: "no operator finalizer"},
+		{name: "operator finalizer", operatorFinalizer: true},
+		{name: "defaulted without operator finalizer", defaulted: true},
+		{name: "defaulted with operator finalizer", operatorFinalizer: true, defaulted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, z, _ := newFinalizerTestReconciler(t)
+			ctx := context.Background()
+			if !tc.defaulted {
+				z.Spec = v1beta1.ZookeeperClusterSpec{}
+			}
+			z.Spec.TriggerRollingRestart = !tc.defaulted
+			originalSpec := z.DeepCopy().Spec
+			z.Finalizers = []string{"other.example/hold"}
+			if tc.operatorFinalizer {
+				z.Finalizers = append(z.Finalizers, utils.ZkFinalizer)
+			}
+			if err := r.Client.Update(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Client.Delete(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			r.Client = interceptor.NewClient(r.Client.(client.WithWatch), interceptor.Funcs{
+				Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error {
+					return errors.New("terminating clusters must not create resources")
+				},
+				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+					cluster, ok := obj.(*v1beta1.ZookeeperCluster)
+					if !ok || !reflect.DeepEqual(cluster.Spec, originalSpec) || utils.ContainsString(cluster.Finalizers, utils.ZkFinalizer) {
+						return errors.New("termination must only remove the operator finalizer")
+					}
+					return c.Update(ctx, obj, opts...)
+				},
+			})
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(z)})
+			if err != nil || result != (reconcile.Result{}) {
+				t.Fatalf("terminating reconcile = %+v, %v", result, err)
+			}
+		})
+	}
+}
+
+func TestFinalizerDeleteMissingOrTerminatingPVC(t *testing.T) {
+	for _, tc := range []string{"already missing", "disappears after list", "PVC protection"} {
+		t.Run(tc, func(t *testing.T) {
+			r, z, pvc := newFinalizerTestReconciler(t)
+			ctx := context.Background()
+			switch tc {
+			case "already missing":
+				if err := r.Client.Delete(ctx, pvc); err != nil {
+					t.Fatal(err)
+				}
+			case "disappears after list":
+				r.Client = interceptor.NewClient(r.Client.(client.WithWatch), interceptor.Funcs{
+					Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+						if _, ok := obj.(*corev1.PersistentVolumeClaim); ok {
+							if err := c.Delete(ctx, obj, opts...); err != nil {
+								return err
+							}
+						}
+						return c.Delete(ctx, obj, opts...)
+					},
+				})
+			case "PVC protection":
+				pvc.Finalizers = []string{"kubernetes.io/pvc-protection"}
+				if err := r.Client.Update(ctx, pvc); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := r.Client.Delete(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(z)}
+			if _, err := r.Reconcile(ctx, req); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Client.Get(ctx, req.NamespacedName, z); !apierrors.IsNotFound(err) {
+				t.Fatalf("successful cleanup did not release cluster finalizer: %v", err)
+			}
+			if tc == "PVC protection" {
+				if err := r.Client.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil || pvc.DeletionTimestamp.IsZero() {
+					t.Fatalf("accepted deletion must leave a protected PVC terminating: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestFinalizerOrphanCleanupPropagatesDeleteFailure(t *testing.T) {
+	r, z, pvc := newFinalizerTestReconciler(t)
+	z.Spec.Replicas, z.Status.ReadyReplicas = 1, 1
+	orphan := pvc.DeepCopy()
+	orphan.Name, orphan.ResourceVersion = "data-example-1", ""
+	if err := r.Client.Create(context.Background(), orphan); err != nil {
+		t.Fatal(err)
+	}
+	deleteErr := errors.New("temporary API failure")
+	r.Client = interceptor.NewClient(r.Client.(client.WithWatch), interceptor.Funcs{
+		Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
+			return deleteErr
+		},
+	})
+	if err := r.cleanupOrphanPVCs(z); !errors.Is(err, deleteErr) {
+		t.Fatalf("orphan cleanup error = %v, want %v", err, deleteErr)
+	}
+}
+
+func newFinalizerTestReconciler(t *testing.T) (*ZookeeperClusterReconciler, *v1beta1.ZookeeperCluster, *corev1.PersistentVolumeClaim) {
+	t.Helper()
+	s := runtime.NewScheme()
+	if err := scheme.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := v1beta1.AddToScheme(s); err != nil {
+		t.Fatal(err)
+	}
+	z := &v1beta1.ZookeeperCluster{ObjectMeta: metav1.ObjectMeta{
+		Name: "example", Namespace: "default", UID: "ensemble-uid", Finalizers: []string{utils.ZkFinalizer},
+	}}
+	z.WithDefaults()
+	z.Spec.Persistence.VolumeReclaimPolicy = v1beta1.VolumeReclaimPolicyDelete
+	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{
+		Name: "data-example-0", Namespace: z.Namespace,
+		Labels: map[string]string{"app": z.Name, "uid": string(z.UID)},
+	}}
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(z, pvc).WithStatusSubresource(z).Build()
+	return &ZookeeperClusterReconciler{Client: cl, Scheme: s, Log: log}, z, pvc
 }
 
 type MockZookeeperClient struct {
@@ -979,9 +1194,9 @@ var _ = Describe("ZookeeperCluster Controller", func() {
 						Namespace: "Namespace",
 					},
 				}
-				r.Client.Create(context.TODO(), pvcDelete)
-				r.deletePVC(*pvcDelete)
-				r.deletePVC(*pvcDelete)
+				Ω(r.Client.Create(context.TODO(), pvcDelete)).To(Succeed())
+				Ω(r.deletePVC(*pvcDelete)).To(Succeed())
+				Ω(r.deletePVC(*pvcDelete)).To(Succeed())
 			})
 
 			It("should not raise an error", func() {
