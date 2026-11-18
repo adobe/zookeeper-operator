@@ -11,9 +11,11 @@ repositories {
     mavenCentral()
 }
 
+val javaVersion = JavaVersion.toVersion(providers.gradleProperty("javaVersion").get())
+
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
 }
 
 val zookeeperVersion = "3.9.7"
@@ -36,6 +38,6 @@ tasks.withType<ShadowJar>() {
 
 tasks.withType<KotlinCompile> {
   compilerOptions {
-    jvmTarget.set(JvmTarget.JVM_21)
+    jvmTarget.set(JvmTarget.fromTarget(javaVersion.majorVersion))
   }
 }
