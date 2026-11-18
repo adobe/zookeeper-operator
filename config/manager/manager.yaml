@@ -19,6 +19,20 @@ spec:
           ports:
           - containerPort: 60000
             name: metrics
+          - containerPort: 8081
+            name: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 5
+            failureThreshold: 3
           command:
           - zookeeper-operator
           imagePullPolicy: Always

@@ -11,18 +11,23 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	zkConfig "github.com/pravega/zookeeper-operator/pkg/controller/config"
 	"github.com/pravega/zookeeper-operator/pkg/version"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -30,7 +35,10 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
@@ -61,8 +69,10 @@ func printVersion() {
 
 func main() {
 	var metricsAddr string
+	var healthProbeAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "127.0.0.1:6000", "The address the metric endpoint binds to.")
+	flag.StringVar(&healthProbeAddr, "health-probe-bind-address", ":8081", "The address the health probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{}
@@ -113,11 +123,12 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:           scheme,
-		Cache:            cacheOpts,
-		Metrics:          server.Options{BindAddress: metricsAddr},
-		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: leaderElectionID,
+		Scheme:                 scheme,
+		Cache:                  cacheOpts,
+		Metrics:                server.Options{BindAddress: metricsAddr},
+		HealthProbeBindAddress: healthProbeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       leaderElectionID,
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
@@ -135,11 +146,61 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	ctx := ctrl.SetupSignalHandler()
+	if err := configureHealthChecks(ctx, mgr); err != nil {
+		log.Error(err, "unable to configure health probes")
+		os.Exit(1)
+	}
+
 	log.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		log.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func configureHealthChecks(ctx context.Context, mgr manager.Manager) error {
+	// Register existing watches before startup so initial cache sync cannot be empty.
+	for _, object := range []client.Object{
+		&api.ZookeeperCluster{}, &appsv1.StatefulSet{}, &corev1.Service{}, &corev1.Pod{},
+	} {
+		if _, err := mgr.GetCache().GetInformer(ctx, object, cache.BlockUntilSynced(false)); err != nil {
+			return fmt.Errorf("initialize probe cache: %w", err)
+		}
+	}
+	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
+		return err
+	}
+	readiness := &managerReadiness{}
+	if err := mgr.AddReadyzCheck("manager", func(_ *http.Request) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !readiness.ready.Load() {
+			return fmt.Errorf("manager cache is not initialized")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return mgr.Add(readiness)
+}
+
+type managerReadiness struct {
+	ready atomic.Bool
+}
+
+func (r *managerReadiness) Start(ctx context.Context) error {
+	// The manager starts non-leader runnables only after its caches sync.
+	r.ready.Store(true)
+	<-ctx.Done()
+	r.ready.Store(false)
+	return nil
+}
+
+func (*managerReadiness) NeedLeaderElection() bool {
+	// Standbys must become ready so a rolling update can replace the old leader.
+	return false
 }
 
 // getWatchNamespace returns the Namespace the operator should be watching for changes

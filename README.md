@@ -144,6 +144,14 @@ NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
 zookeeper-operator   1         1         1            1           12m
 ```
 
+The operator serves `/healthz` (process liveness) and `/readyz` on
+`--health-probe-bind-address` (default `:8081`), separately from metrics.
+Helm and Kustomize deployments probe this container port without exposing a
+Service. Readiness requires manager cache initialization and becomes false on
+shutdown; standby managers can be ready without holding the leader lease.
+Neither probe reports ZooKeeper ensemble readiness or requires ZooKeeper to be
+available. Use each `ZookeeperCluster`'s status to check its ensemble.
+
 ### Deploy a sample Zookeeper cluster
 
 #### Manual deployment
@@ -486,17 +494,17 @@ The list of available commands are
 ### API-server integration tests
 
 `make test` runs the fast unit suite without Kubernetes binaries.
-Run `make test-envtest` for the opt-in controller API-server tests. This target
+Run `make test-envtest` for the opt-in manager and controller API-server tests. This target
 installs the `ENVTEST_TOOL_VERSION` pinned in the Makefile and downloads
 its `ENVTEST_K8S_VERSION` assets into `bin/k8s`.
 Missing or unusable assets fail the target instead of skipping tests.
 The same target gates CI and releases.
 
-The tagged suite verifies status-subresource isolation, stale-update conflicts,
-and deletion finalizers using the repository CRD and isolated namespaces.
-It does not run the operator, a StatefulSet controller, garbage collection, or
-a storage provisioner; full reconciliation and storage behavior still require
-the live kind e2e suite.
+The tagged suite verifies operator probe startup/shutdown behavior,
+status-subresource isolation, stale-update conflicts, and deletion finalizers
+using the repository CRD and isolated namespaces. It runs the manager in-process
+without a StatefulSet controller, garbage collection, or a storage provisioner;
+full reconciliation and storage behavior still require the live kind e2e suite.
 
 ### Update dependencies
 

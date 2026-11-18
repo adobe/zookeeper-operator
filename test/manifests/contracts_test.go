@@ -215,6 +215,73 @@ func TestEmptySecurityContextPreservesDefaults(t *testing.T) {
 	}
 }
 
+func TestOperatorHealthProbes(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		command string
+		args    []string
+	}{
+		{"helm", "helm", []string{"template", "zookeeper-operator", "charts/zookeeper-operator", "--kube-version", "1.34.3"}},
+		{"kustomize", "bin/kustomize", []string{"build", "config/default"}},
+		{"e2e", "bin/kustomize", []string{"build", "config/e2e"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var operator *corev1.Container
+			for _, object := range render(t, test.command, test.args...) {
+				switch object.GetKind() {
+				case "Service":
+					var service corev1.Service
+					if err := runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &service); err != nil {
+						t.Fatal(err)
+					}
+					for _, port := range service.Spec.Ports {
+						if port.Port == 8081 || port.TargetPort.IntVal == 8081 || port.TargetPort.StrVal == "health" {
+							t.Error("operator probes must not have a public Service")
+						}
+					}
+				case "Deployment":
+					var deployment appsv1.Deployment
+					if err := runtime.DefaultUnstructuredConverter.FromUnstructured(object.Object, &deployment); err != nil {
+						t.Fatal(err)
+					}
+					for _, container := range deployment.Spec.Template.Spec.Containers {
+						if container.Name == "zookeeper-operator" {
+							operator = &container
+						}
+					}
+				}
+			}
+			if operator == nil {
+				t.Fatal("operator container not found")
+			}
+			for _, probe := range []struct {
+				name   string
+				probe  *corev1.Probe
+				path   string
+				period int32
+			}{
+				{"liveness", operator.LivenessProbe, "/healthz", 10},
+				{"readiness", operator.ReadinessProbe, "/readyz", 5},
+			} {
+				if probe.probe == nil || probe.probe.HTTPGet == nil {
+					t.Errorf("%s HTTP probe missing", probe.name)
+					continue
+				}
+				get := probe.probe.HTTPGet
+				if get.Path != probe.path || get.Port.StrVal != "health" ||
+					probe.probe.PeriodSeconds != probe.period || probe.probe.FailureThreshold != 3 {
+					t.Errorf("%s probe has wrong route, port or timing: %+v", probe.name, probe.probe)
+				}
+			}
+			if !slices.ContainsFunc(operator.Ports, func(port corev1.ContainerPort) bool {
+				return port.Name == "health" && port.ContainerPort == 8081
+			}) {
+				t.Error("named health container port 8081 missing")
+			}
+		})
+	}
+}
+
 func renderOperator(t *testing.T, values string) appsv1.Deployment {
 	t.Helper()
 	valuesPath := filepath.Join(t.TempDir(), "values.yaml")
