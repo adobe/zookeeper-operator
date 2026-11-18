@@ -35,7 +35,7 @@ import (
 func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 	address, conn, suffix := startMetadataZooKeeper(t)
 	zookeeper := &operatorzk.DefaultZookeeperClient{}
-	if err := zookeeper.Connect(address); err != nil {
+	if err := zookeeper.Connect(context.Background(), address); err != nil {
 		t.Fatal(err)
 	}
 	closeClient := sync.OnceFunc(zookeeper.Close)
@@ -44,7 +44,7 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 		deadline.Stop()
 		closeClient()
 	})
-	if _, err := zookeeper.NodeExists("/"); err != nil {
+	if _, err := zookeeper.NodeExists(context.Background(), "/"); err != nil {
 		t.Fatalf("wait for production client session: %v", err)
 	}
 	z := &v1beta1.ZookeeperCluster{}
@@ -56,7 +56,7 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 		if _, err := conn.Create(path, []byte("CLUSTER_SIZE=5"), 0, zk.WorldACL(zk.PermAll)); err != nil {
 			t.Fatal(err)
 		}
-		if err := zookeeper.CreateNode(z, path); err != nil {
+		if err := zookeeper.CreateNode(context.Background(), z, path); err != nil {
 			t.Fatal(err)
 		}
 		assertMetadataData(t, conn, path, "CLUSTER_SIZE=5", 0)
@@ -64,14 +64,14 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 
 	t.Run("new metadata and repeated create", func(t *testing.T) {
 		path := root + "/new/child"
-		if err := zookeeper.CreateNode(z, path); err != nil {
+		if err := zookeeper.CreateNode(context.Background(), z, path); err != nil {
 			t.Fatal(err)
 		}
 		assertMetadataData(t, conn, path, "CLUSTER_SIZE=3", 0)
 		if _, err := conn.Set(path, []byte("CLUSTER_SIZE=5"), 0); err != nil {
 			t.Fatal(err)
 		}
-		if err := zookeeper.CreateNode(z, path); err != nil {
+		if err := zookeeper.CreateNode(context.Background(), z, path); err != nil {
 			t.Fatal(err)
 		}
 		assertMetadataData(t, conn, path, "CLUSTER_SIZE=5", 1)
@@ -82,7 +82,7 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 		if _, err := conn.Create(parent, []byte("parent-data"), 0, zk.WorldACL(zk.PermAll)); err != nil {
 			t.Fatal(err)
 		}
-		if err := zookeeper.CreateNode(z, parent+"/child"); err != nil {
+		if err := zookeeper.CreateNode(context.Background(), z, parent+"/child"); err != nil {
 			t.Fatal(err)
 		}
 		assertMetadataData(t, conn, parent, "parent-data", 0)
@@ -95,7 +95,7 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, path := range []string{parent + "/child", parent + "/missing/child"} {
-			if err := zookeeper.CreateNode(z, path); !errors.Is(err, zk.ErrNoAuth) {
+			if err := zookeeper.CreateNode(context.Background(), z, path); !errors.Is(err, zk.ErrNoAuth) {
 				t.Fatalf("CreateNode(%s) = %v, want ErrNoAuth", path, err)
 			}
 		}
@@ -129,7 +129,10 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 			},
 		})
 		r := &controllers.ZookeeperClusterReconciler{
-			Client: faultClient, Scheme: s, ZkClient: &metadataSessionClient{DefaultZookeeperClient: zookeeper},
+			Client: faultClient, Scheme: s, NewZkClient: func() operatorzk.ZookeeperClient {
+				client := &operatorzk.DefaultZookeeperClient{}
+				return &metadataSessionClient{DefaultZookeeperClient: client, address: address}
+			},
 		}
 		ctx := context.Background()
 		request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}
@@ -241,10 +244,12 @@ func assertMetadataData(t *testing.T, conn *zk.Conn, path, want string, version 
 	}
 }
 
-// The test owns the ready session across reconciles, including their Close calls.
+// Route each reconciliation-owned session to the disposable test server.
 type metadataSessionClient struct {
 	*operatorzk.DefaultZookeeperClient
+	address string
 }
 
-func (*metadataSessionClient) Connect(string) error { return nil }
-func (*metadataSessionClient) Close()               {}
+func (c *metadataSessionClient) Connect(ctx context.Context, _ string) error {
+	return c.DefaultZookeeperClient.Connect(ctx, c.address)
+}
