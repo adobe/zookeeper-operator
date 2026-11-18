@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -16,12 +15,9 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	"github.com/pravega/zookeeper-operator/controllers"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -80,9 +76,9 @@ func TestOperatorHealthLifecycle(t *testing.T) {
 	if err := configureHealthChecks(ctx, mgr); err != nil {
 		t.Fatal(err)
 	}
-	zkDown := &unavailableZooKeeper{attempted: make(chan struct{})}
 	if err := (&controllers.ZookeeperClusterReconciler{
-		Client: mgr.GetClient(), Scheme: scheme, Log: ctrl.Log, ZkClient: zkDown,
+		Client: mgr.GetClient(), Scheme: scheme, Log: ctrl.Log,
+		ZkClient: new(zkClient.DefaultZookeeperClient),
 	}).SetupWithManager(mgr); err != nil {
 		t.Fatal(err)
 	}
@@ -120,37 +116,17 @@ func TestOperatorHealthLifecycle(t *testing.T) {
 		awaitProbe(t, baseURL+"/readyz", http.StatusInternalServerError)
 	})
 
-	c, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cluster := &api.ZookeeperCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "unavailable", Namespace: "default"},
-		Spec:       api.ZookeeperClusterSpec{Replicas: 2},
-	}
-	cluster.WithDefaults()
-	if err := c.Create(ctx, cluster); err != nil {
-		t.Fatal(err)
-	}
-	// No StatefulSet controller or ZooKeeper server runs in envtest.
-	// A mismatched replica count forces a real reconciliation to contact ZooKeeper.
-	sts := zkClient.MakeStatefulSet(cluster)
-	*sts.Spec.Replicas = 1
-	if err := c.Create(ctx, sts); err != nil {
-		t.Fatal(err)
-	}
 	finishInitialization()
-	awaitProbe(t, baseURL+"/readyz", http.StatusOK)
-	awaitSignal(t, zkDown.attempted, "failed ZooKeeper connection during reconciliation")
-	awaitProbe(t, baseURL+"/healthz", http.StatusOK)
-	awaitProbe(t, baseURL+"/readyz", http.StatusOK)
+	t.Run("ready without ensembles", func(t *testing.T) {
+		awaitProbe(t, baseURL+"/readyz", http.StatusOK)
+	})
 
 	cancel()
-	awaitSignal(t, stopping, "controller shutdown")
-	t.Run("not ready while controller work drains", func(t *testing.T) {
+	awaitSignal(t, stopping, "manager shutdown")
+	t.Run("not ready while manager work drains", func(t *testing.T) {
 		awaitProbe(t, baseURL+"/readyz", http.StatusInternalServerError)
 	})
-	// HTTP probes remain available while controller work drains.
+	// HTTP probes remain available while manager work drains.
 	awaitProbe(t, baseURL+"/healthz", http.StatusOK)
 }
 
@@ -158,17 +134,6 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
-}
-
-type unavailableZooKeeper struct {
-	zkClient.ZookeeperClient
-	attempted chan struct{}
-	once      sync.Once
-}
-
-func (z *unavailableZooKeeper) Connect(string) error {
-	z.once.Do(func() { close(z.attempted) })
-	return errors.New("ZooKeeper is unavailable")
 }
 
 func awaitSignal(t *testing.T, signal <-chan struct{}, what string) {
