@@ -11,7 +11,13 @@ repositories {
     mavenCentral()
 }
 
-val javaVersion = JavaVersion.toVersion(providers.gradleProperty("javaVersion").get())
+val javaVersion = JavaVersion.toVersion(
+    providers.gradleProperty("javaVersion").orElse(providers.provider {
+        file("../zookeeper-image/Dockerfile").readLines()
+            .single { it.startsWith("ARG java_version=") }
+            .substringAfter("=")
+    }).get()
+)
 
 java {
     sourceCompatibility = javaVersion

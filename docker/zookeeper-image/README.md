@@ -64,5 +64,6 @@ Set `java_version` only when building the base image; no second version
 argument is needed for the full image.
 
 The native Gradle builder uses JDK 25 independently of the selected runtime.
-For direct Gradle builds, supply the target explicitly with
-`./gradlew -PjavaVersion=21 shadowJar --no-daemon`.
+Direct Gradle builds, including `./gradlew build --no-daemon`, read the
+default from the same base Dockerfile. An explicit `-PjavaVersion=<major>`
+overrides that target when needed.
