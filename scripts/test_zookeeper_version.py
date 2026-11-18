@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,99 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class JavaDownloadTest(unittest.TestCase):
+    def run_download(self, arch="amd64", base="https://download.oracle.com/java",
+                     major="25", version="25", api_key=None, corrupt=False):
+        dockerfile = (ROOT / "docker/zookeeper-image/Dockerfile").read_text()
+        download = dockerfile.split("ENV JAVA_VERSION=", 1)[1].split(
+            "RUN ", 1
+        )[1].split('mkdir -p "$JAVA_HOME"', 1)[0]
+        if download.startswith("--mount="):
+            download = download.split("\\\n", 1)[1]
+        download = download.replace("\\\n", "").rstrip() + "\n"
+        variables = {key: value for key, value in os.environ.items()
+                     if key != "JAVA_DOWNLOAD_APIKEY"}
+        variables.update(
+            ARCH=arch, java_version=major, java_download_version=version,
+            java_download_base_url=base,
+            DOWNLOAD_SHA=hashlib.sha256(
+                b"wrong" if corrupt else b"artifact"
+            ).hexdigest(),
+        )
+        if api_key is not None:
+            variables["JAVA_DOWNLOAD_APIKEY"] = api_key
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["bash", "-ec",
+                 'dpkg() { printf "%s\\n" "$ARCH"; }\n'
+                 'apt-mark() { :; }\n'
+                 'apt-get() { :; }\n'
+                 'rm() { :; }\n'
+                 'wget() { return 99; }\n'
+                 'curl() {\n'
+                 '    python3 -c \'import json, sys; '
+                 'open("downloads.jsonl", "a").write('
+                 'json.dumps(sys.argv[1:]) + "\\n")\' "$@"\n'
+                 '    for url; do :; done\n'
+                 '    case "$url" in\n'
+                 '        *.sha256) printf "%s\\n" "$DOWNLOAD_SHA" ;;\n'
+                 '        *) printf artifact > openjdk.tgz ;;\n'
+                 '    esac\n'
+                 '}\n' + download],
+                cwd=directory, env=variables, text=True, capture_output=True,
+            )
+            log = Path(directory) / "downloads.jsonl"
+            calls = [json.loads(line) for line in log.read_text().splitlines()
+                     ] if log.exists() else []
+        return result, calls
+
+    def test_oracle_defaults_preserve_both_architecture_urls(self):
+        for arch, name in (("amd64", "x64"), ("arm64", "aarch64")):
+            with self.subTest(arch=arch):
+                result, calls = self.run_download(arch=arch)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                url = ("https://download.oracle.com/java/25/latest/"
+                       f"jdk-25_linux-{name}_bin.tar.gz")
+                self.assertEqual([call[-1] for call in calls],
+                                 [url, url + ".sha256"])
+                self.assertNotIn("--expand-header", calls[0])
+
+    def test_alternate_source_uses_patch_version_and_optional_authentication(self):
+        for arch, name in (("amd64", "x64"), ("arm64", "aarch64")):
+            for key in (None, "synthetic-download-key"):
+                with self.subTest(arch=arch, authenticated=key is not None):
+                    result, calls = self.run_download(
+                        arch=arch, base="https://jdk.example.test/java",
+                        major="21", version="21.0.13.1", api_key=key,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    url = ("https://jdk.example.test/java/21/"
+                           f"jdk-21.0.13.1_linux-{name}_bin.tar.gz")
+                    self.assertEqual([call[-1] for call in calls],
+                                     [url, url + ".sha256"])
+                    for call in calls:
+                        self.assertIn("--fail", call)
+                        self.assertIn("--location", call)
+                        self.assertEqual("--expand-header" in call, key is not None)
+                        if key is not None:
+                            self.assertIn("%JAVA_DOWNLOAD_APIKEY", call)
+                            self.assertIn("Authorization: Bearer {{JAVA_DOWNLOAD_APIKEY}}",
+                                          call)
+                            self.assertNotIn(key, " ".join(call))
+                            self.assertNotIn(key, result.stderr)
+
+    def test_checksum_mismatch_stops_the_build(self):
+        result, _ = self.run_download(corrupt=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FAILED", result.stdout)
+
+    def test_unsupported_architecture_stops_before_downloading(self):
+        result, calls = self.run_download(arch="s390x")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsupported architecture", result.stderr)
+        self.assertEqual(calls, [])
 
 
 class ZookeeperDownloadTest(unittest.TestCase):

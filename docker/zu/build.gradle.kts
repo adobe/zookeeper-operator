@@ -11,9 +11,17 @@ repositories {
     mavenCentral()
 }
 
+val javaVersion = JavaVersion.toVersion(
+    providers.gradleProperty("javaVersion").orElse(providers.provider {
+        file("../zookeeper-image/Dockerfile").readLines()
+            .single { it.startsWith("ARG java_version=") }
+            .substringAfter("=")
+    }).get()
+)
+
 java {
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
 }
 
 val zookeeperVersion = "3.9.7"
@@ -36,6 +44,6 @@ tasks.withType<ShadowJar>() {
 
 tasks.withType<KotlinCompile> {
   compilerOptions {
-    jvmTarget.set(JvmTarget.JVM_25)
+    jvmTarget.set(JvmTarget.fromTarget(javaVersion.majorVersion))
   }
 }
