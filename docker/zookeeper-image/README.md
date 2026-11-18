@@ -3,20 +3,20 @@
 Build from the repository root:
 
 ```bash
-docker buildx build \
+docker buildx build --load \
   --build-arg ZK_VERSION="$(./scripts/zookeeper-version.sh)" \
   -t zookeeper-apache:local docker/zookeeper-image
 ```
 
-The image uses Debian Trixie and Java 25. Oracle's public JDK download URL is
-the default, without authentication.
+The image uses Debian Trixie and defaults to Java 25. Oracle's public JDK
+download URL is the default, without authentication.
 
 ## Alternate JDK downloads
 
 Override `java_download_base_url` and `java_download_version` to use another
 source. The Dockerfile appends `java_version` (default: `25`) and `latest`
-for Oracle, or `java_version` and `java_download_version` for alternate
-sources. Neither version belongs in the base URL. Alternate sources must
+for Oracle, or only `java_version` for alternate sources. Do not include
+the Java-major directory in the base URL. Alternate sources must
 provide Oracle-style archive filenames and matching `.sha256` files for
 each architecture (`x64` and `aarch64`).
 
@@ -24,10 +24,11 @@ For example, add these options to the build command:
 
 ```bash
 --build-arg java_download_base_url=https://jdk.example.com/java \
---build-arg java_download_version=25.0.1.1
+--build-arg java_version=21 \
+--build-arg java_download_version=21.0.13.1
 ```
 
-This requests `/java/25/25.0.1.1/jdk-25.0.1.1_linux-<arch>_bin.tar.gz`
+This requests `/java/21/jdk-21.0.13.1_linux-<arch>_bin.tar.gz`
 and its `.sha256` file. Both downloads must succeed and the checksum must match.
 
 For authenticated downloads, pass an optional API key as a BuildKit secret:
@@ -46,3 +47,17 @@ build step's `build-args`, configure the GitHub Actions secret
 For authenticated downloads, also enable the commented `secrets` input and
 configure `JAVA_DOWNLOAD_APIKEY`. PR image builds continue to use Oracle
 without secrets.
+
+## Full ZooKeeper image
+
+After building the base image above, build the operator-flavoured image:
+
+```bash
+docker buildx build --load \
+  --build-arg BASE_IMAGE=zookeeper-apache:local \
+  -t zookeeper:local docker
+```
+
+The `zu` helper targets Java 21 bytecode, so the full image supports both
+Java 21 and the default Java 25 runtime. The helper is built with JDK 25
+regardless of the runtime selected for the base image.

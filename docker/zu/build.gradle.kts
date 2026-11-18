@@ -12,8 +12,8 @@ repositories {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 val zookeeperVersion = "3.9.7"
@@ -36,6 +36,6 @@ tasks.withType<ShadowJar>() {
 
 tasks.withType<KotlinCompile> {
   compilerOptions {
-    jvmTarget.set(JvmTarget.JVM_25)
+    jvmTarget.set(JvmTarget.JVM_21)
   }
 }

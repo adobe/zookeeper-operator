@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class JavaDownloadTest(unittest.TestCase):
     def run_download(self, arch="amd64", base="https://download.oracle.com/java",
-                     version="25", api_key=None, corrupt=False):
+                     major="25", version="25", api_key=None, corrupt=False):
         dockerfile = (ROOT / "docker/zookeeper-image/Dockerfile").read_text()
         download = dockerfile.split("ENV JAVA_VERSION=", 1)[1].split(
             "RUN ", 1
@@ -24,7 +24,7 @@ class JavaDownloadTest(unittest.TestCase):
         variables = {key: value for key, value in os.environ.items()
                      if key != "JAVA_DOWNLOAD_APIKEY"}
         variables.update(
-            ARCH=arch, java_version="25", java_download_version=version,
+            ARCH=arch, java_version=major, java_download_version=version,
             java_download_base_url=base,
             DOWNLOAD_SHA=hashlib.sha256(
                 b"wrong" if corrupt else b"artifact"
@@ -74,11 +74,11 @@ class JavaDownloadTest(unittest.TestCase):
                 with self.subTest(arch=arch, authenticated=key is not None):
                     result, calls = self.run_download(
                         arch=arch, base="https://jdk.example.test/java",
-                        version="25.0.1.1", api_key=key,
+                        major="21", version="21.0.13.1", api_key=key,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    url = ("https://jdk.example.test/java/25/25.0.1.1/"
-                           f"jdk-25.0.1.1_linux-{name}_bin.tar.gz")
+                    url = ("https://jdk.example.test/java/21/"
+                           f"jdk-21.0.13.1_linux-{name}_bin.tar.gz")
                     self.assertEqual([call[-1] for call in calls],
                                      [url, url + ".sha256"])
                     for call in calls:
