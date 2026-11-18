@@ -324,7 +324,34 @@ $ kubectl get zk
 NAME      REPLICAS   READY REPLICAS   VERSION   DESIRED VERSION   INTERNAL ENDPOINT    EXTERNAL ENDPOINT   AGE
 example   3          3                 0.2.7     0.2.7             10.100.200.18:2181   N/A                 94s
 ```
->Note: User should only provide value for either the field persistence or ephemeral in the spec if none of the values is specified default is persistence
+#### Storage admission and compatibility
+
+`spec.storageType` accepts `ephemeral` or `persistence`, case-insensitively.
+An omitted or empty value selects persistence, even if an `ephemeral` block
+is present. New objects must set `storageType: ephemeral` to use ephemeral
+storage. Only the matching `ephemeral` or `persistence` configuration block
+may be supplied; both blocks are optional. Misspelled modes and contradictory
+blocks are rejected by the CRD.
+
+When a `persistence` block is present, admission defaults its omitted
+`reclaimPolicy` to `Retain`; explicit `Delete` and `Retain` are preserved.
+Admission does not create storage blocks or default PVC specifications.
+The controller retains its fallback defaults, including persistent storage
+when the mode is omitted, `ReadWriteOnce` access and a `20Gi` storage request
+when none is specified.
+
+On Kubernetes 1.34, the schema uses an explicit update-aware CEL rule.
+Existing invalid storage configurations can still receive unrelated
+metadata, status and spec updates while all three storage fields remain
+unchanged. Changing any of `storageType`, `persistence` or `ephemeral`
+requires the resulting combination to be valid. This is admission validation,
+not a storage migration: changing the mode does not move existing data.
+Back up data and plan any actual storage change separately.
+
+Apply the release's CRD before upgrading the operator. Reapplying the previous
+CRD restores its admission behavior without deleting custom resources or
+PVCs; do not delete/recreate the CRD for rollback. Existing stored defaults
+remain. No PVC retention or ownership behavior changes in this update.
 
 >Note: In case of ephemeral storage, the cluster may not be able to come back up if more than quorum number of nodes are restarted simultaneously.
 

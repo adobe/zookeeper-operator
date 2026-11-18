@@ -69,7 +69,9 @@ spec:
           metadata:
             type: object
           spec:
-            description: ZookeeperClusterSpec defines the desired state of ZookeeperCluster
+            description: |-
+              ZookeeperClusterSpec defines the desired state of ZookeeperCluster
+              Existing invalid storage is allowed only when all three storage fields are unchanged.
             properties:
               adminServerService:
                 description: |-
@@ -1805,8 +1807,8 @@ spec:
                 type: string
               ephemeral:
                 description: |-
-                  Ephemeral is the configuration which helps create ephemeral storage
-                  At anypoint only one of Persistence or Ephemeral should be present in the manifest
+                  Ephemeral configures ephemeral storage and requires storageType ephemeral.
+                  Only the storage block matching StorageType may be present.
                 properties:
                   emptydirvolumesource:
                     description: |-
@@ -3513,6 +3515,7 @@ spec:
                       creates.
                     type: object
                   reclaimPolicy:
+                    default: Retain
                     description: |-
                       VolumeReclaimPolicy is a zookeeper operator configuration. If it's set to Delete,
                       the corresponding PVCs will be deleted by the operator when zookeeper cluster is deleted.
@@ -5467,9 +5470,8 @@ spec:
                 type: integer
               storageType:
                 description: |-
-                  StorageType is used to tell which type of storage we will be using
-                  It can take either Ephemeral or persistence
-                  Default StorageType is Persistence storage
+                  StorageType selects ephemeral or persistence storage, case-insensitively.
+                  An omitted or empty value selects persistence storage.
                 type: string
               triggerRollingRestart:
                 description: |-
@@ -7572,6 +7574,20 @@ spec:
                   type: object
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: storageType must be ephemeral or persistence (case-insensitive)
+                with only its matching storage block; invalid legacy storage must
+                stay unchanged or be corrected
+              optionalOldSelf: true
+              rule: '((!has(self.storageType) || self.storageType.matches(''(?i)^(ephemeral|persistence)?$''))
+                && (has(self.storageType) && self.storageType.matches(''(?i)^ephemeral$'')
+                ? !has(self.persistence) : !has(self.ephemeral))) || (oldSelf.hasValue()
+                && has(self.storageType) == has(oldSelf.value().storageType) && (!has(self.storageType)
+                || self.storageType == oldSelf.value().storageType) && has(self.persistence)
+                == has(oldSelf.value().persistence) && (!has(self.persistence) ||
+                self.persistence == oldSelf.value().persistence) && has(self.ephemeral)
+                == has(oldSelf.value().ephemeral) && (!has(self.ephemeral) || self.ephemeral
+                == oldSelf.value().ephemeral))'
           status:
             description: ZookeeperClusterStatus defines the observed state of ZookeeperCluster
             properties:
