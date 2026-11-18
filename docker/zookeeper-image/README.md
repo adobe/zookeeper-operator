@@ -15,8 +15,9 @@ download URL is the default, without authentication.
 
 Override `java_download_base_url` and `java_download_version` to use another
 source. The Dockerfile appends `java_version` (default: `25`) and `latest`
-for Oracle, or only `java_version` for alternate sources. Do not include
-the Java-major directory in the base URL. Alternate sources must
+for Oracle, or `java_version` and `java_download_version` for alternate sources.
+A trailing slash on the base URL is optional. Do not include
+the Java-major or patch-version directories in the base URL. Alternate sources must
 provide Oracle-style archive filenames and matching `.sha256` files for
 each architecture (`x64` and `aarch64`).
 
@@ -28,7 +29,7 @@ For example, add these options to the build command:
 --build-arg java_download_version=21.0.13.1
 ```
 
-This requests `/java/21/jdk-21.0.13.1_linux-<arch>_bin.tar.gz`
+This requests `/java/21/21.0.13.1/jdk-21.0.13.1_linux-<arch>_bin.tar.gz`
 and its `.sha256` file. Both downloads must succeed and the checksum must match.
 
 For authenticated downloads, pass an optional API key as a BuildKit secret:
@@ -40,13 +41,11 @@ For authenticated downloads, pass an optional API key as a BuildKit secret:
 The key is sent as an `Authorization: Bearer` header, is not stored in the
 image, and is not forwarded to a different host on redirects.
 
-Release builds also default to Oracle. To use an alternate source, add the
-commented overrides in `.github/workflows/release.yml` to the Apache ZooKeeper
-build step's `build-args`, configure the GitHub Actions secret
-`JAVA_DOWNLOAD_BASE_URL`, and select a matching `java_download_version`.
-For authenticated downloads, also enable the commented `secrets` input and
-configure `JAVA_DOWNLOAD_APIKEY`. PR image builds continue to use Oracle
-without secrets.
+This hotfix's release workflow selects Java `21.0.13.1` with Java major `21`.
+Set `JAVA_DOWNLOAD_BASE_URL` to the raw Artifactory repository ending in
+`generic-jdk-release/java/oracle` and configure `JAVA_DOWNLOAD_APIKEY` with a
+read credential. The workflow passes the credential as the BuildKit secret
+shown above. PR image builds continue to use Oracle without secrets.
 
 ## Full ZooKeeper image
 
