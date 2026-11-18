@@ -24,7 +24,7 @@ java {
     targetCompatibility = javaVersion
 }
 
-val zookeeperVersion = "3.9.7"
+val zookeeperVersion = "3.8.4"
 
 dependencies {
     implementation(kotlin("stdlib"))
