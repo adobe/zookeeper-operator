@@ -151,9 +151,18 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- docker buildx rm zookeeper-builder
 	rm Dockerfile.cross
 
-build-zk-image:
+JAVA_DOWNLOAD_BASE_URL ?= https://download.oracle.com/java
+JAVA_DOWNLOAD_VERSION ?= 21
 
-	docker build --build-arg VERSION=$(VERSION)  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) -t $(APP_REPO):$(VERSION) ./docker
+build-zk-image:
+	zk_version="$$(./scripts/zookeeper-version.sh)" && \
+		docker build --build-arg ZK_VERSION="$$zk_version" \
+		--build-arg java_download_base_url="$(JAVA_DOWNLOAD_BASE_URL)" \
+		--build-arg java_download_version="$(JAVA_DOWNLOAD_VERSION)" \
+		--secret id=JAVA_DOWNLOAD_APIKEY,env=JAVA_DOWNLOAD_APIKEY \
+		-t $(APP_REPO):$(VERSION)-apache ./docker/zookeeper-image
+	docker build --build-arg VERSION=$(VERSION) --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) \
+		--build-arg BASE_IMAGE=$(APP_REPO):$(VERSION)-apache -t $(APP_REPO):$(VERSION) ./docker
 	docker tag $(APP_REPO):$(VERSION) $(APP_REPO):latest
 
 build-zk-image-swarm:

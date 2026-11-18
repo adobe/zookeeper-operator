@@ -3,8 +3,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "1.9.21"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    kotlin("jvm") version "2.4.21"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 repositories {
@@ -24,6 +24,8 @@ java {
     targetCompatibility = javaVersion
 }
 
+val zookeeperVersion = "3.8.4"
+
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
@@ -31,6 +33,9 @@ dependencies {
 
 tasks.withType<ShadowJar>() {
     archiveClassifier.set("")
+    filesMatching("META-INF/*.kotlin_module") {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
     manifest {
         attributes["Main-Class"] = "io.pravega.zookeeper.MainKt"
     }

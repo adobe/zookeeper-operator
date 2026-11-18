@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   # GitHub Container Registry
@@ -26,7 +26,10 @@ jobs:
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
       built_at: ${{ steps.date.outputs.built_at }}
+      zk_version: ${{ steps.zk.outputs.zk_version }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
       - name: Get tag name
         id: vars
         run: echo "tag=${GITHUB_REF:10}" >> $GITHUB_OUTPUT
@@ -34,6 +37,11 @@ jobs:
         id: date
         run: |
           echo "built_at=$(date --rfc-3339=date)" >> $GITHUB_OUTPUT
+      - name: Resolve Apache ZooKeeper version
+        id: zk
+        run: |
+          zk_version="$(./scripts/zookeeper-version.sh)"
+          echo "zk_version=$zk_version" >> "$GITHUB_OUTPUT"
 
   operator-test:
     runs-on: ubuntu-latest
@@ -43,7 +51,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Set up Go 1.25
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v6
         with:
           go-version: 1.25
         id: go
@@ -60,14 +68,22 @@ jobs:
 
   build-zookeeper-apache:
     runs-on: ubuntu-latest
-    needs: prepare
-    if: ${{ startsWith(github.ref, 'refs/tags/zk') }}
+    needs: [prepare, operator-test]
+    outputs:
+      digest: ${{ steps.build-zk-apache.outputs.digest }}
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      - name: Check emergency JDK download configuration
+        env:
+          JAVA_DOWNLOAD_BASE_URL: ${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
+          JAVA_DOWNLOAD_APIKEY: ${{ secrets.JAVA_DOWNLOAD_APIKEY }}
+        run: |
+          : "${JAVA_DOWNLOAD_BASE_URL:?Set the approved JDK mirror repository secret}"
+          : "${JAVA_DOWNLOAD_APIKEY:?Set the JDK mirror credential repository secret}"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -91,21 +107,22 @@ jobs:
             ${{ env.DOCKERHUB_ZK_IMAGE }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper
           tags: |
-            type=raw,value=3.8.4-apache-${{ needs.prepare.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.zk_version }}-apache-${{ needs.prepare.outputs.tag }}
           labels: |
             org.opencontainers.image.description=Apache Zookeeper ${{ needs.prepare.outputs.zk_version }}
       # Rebuilt on every release with Debian security updates and the selected JDK.
       - name: Build and push zookeeper Apache image
+        id: build-zk-apache
         uses: docker/build-push-action@v6
         with:
           context: docker/zookeeper-image
-          # Enable these together when selecting an alternate JDK release:
-          # secrets: |
-          #   JAVA_DOWNLOAD_APIKEY=${{ secrets.JAVA_DOWNLOAD_APIKEY }}
-          # Add these overrides under build-args:
-          # java_version=25
-          # java_download_base_url=${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
-          # java_download_version=25.0.1.1
+          secrets: |
+            JAVA_DOWNLOAD_APIKEY=${{ secrets.JAVA_DOWNLOAD_APIKEY }}
+          build-args: |
+            ZK_VERSION=${{ needs.prepare.outputs.zk_version }}
+            java_version=21
+            java_download_version=21.0.13.1
+            java_download_base_url=${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-zk-apache.outputs.tags }}
           labels: ${{ steps.meta-zk-apache.outputs.labels }}
@@ -114,7 +131,7 @@ jobs:
 
   build-zookeeper:
     runs-on: ubuntu-latest
-    needs: [prepare, operator-test]
+    needs: [prepare, operator-test, build-zookeeper-apache]
     if: ${{ !startsWith(github.ref, 'refs/tags/zk') }}
     permissions:
       contents: read
@@ -145,7 +162,7 @@ jobs:
             ${{ env.DOCKERHUB_ZK_IMAGE }}
             ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper
           tags: |
-            type=raw,value=3.8.4-${{ needs.prepare.outputs.tag }}
+            type=raw,value=${{ needs.prepare.outputs.zk_version }}-${{ needs.prepare.outputs.tag }}
           labels: |
             org.opencontainers.image.description=Apache Zookeeper image
       - name: Build and push zookeeper image
@@ -153,6 +170,8 @@ jobs:
         with:
           context: docker
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}/zookeeper@${{ needs.build-zookeeper-apache.outputs.digest }}
           tags: ${{ steps.meta-zk.outputs.tags }}
           labels: ${{ steps.meta-zk.outputs.labels }}
           annotations: ${{ steps.meta-zk.outputs.annotations }}

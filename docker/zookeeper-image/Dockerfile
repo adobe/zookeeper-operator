@@ -3,7 +3,7 @@
 # backported from https://github.com/docker-library/openjdk/blob/4c2b1a57869e24c5fcfbea6a17e558c710d4f6bd/21/jdk/slim-bullseye/Dockerfile
 FROM debian:trixie-slim
 
-ARG java_version=25
+ARG java_version=21
 ARG java_download_version=${java_version}
 ARG java_download_base_url=https://download.oracle.com/java
 
@@ -125,14 +125,15 @@ RUN set -eux; \
         dirmngr \
         gosu \
         gnupg \
-        netcat \
+        netcat-openbsd \
         wget; \
     rm -rf /var/lib/apt/lists/*; \
 # Verify that gosu binary works
     gosu nobody true
 
-ARG SHORT_DISTRO_NAME=zookeeper-3.8.4
-ARG DISTRO_NAME=apache-zookeeper-3.8.4-bin
+ARG ZK_VERSION=3.8.4
+ARG SHORT_DISTRO_NAME=zookeeper-${ZK_VERSION}
+ARG DISTRO_NAME=apache-zookeeper-${ZK_VERSION}-bin
 
 # Download Apache Zookeeper, verify its PGP signature, untar and clean up
 RUN set -eux; \
@@ -142,6 +143,7 @@ RUN set -eux; \
         local success=; \
         local distUrl=; \
         for distUrl in \
+            https://dlcdn.apache.org/ \
 	        https://downloads.apache.org/ \
             https://www-us.apache.org/dist/ \
             https://www.apache.org/dist/ \
@@ -166,7 +168,7 @@ RUN set -eux; \
     chown -R zookeeper:zookeeper "/$DISTRO_NAME"
 COPY opt/zkEnv.sh  $DISTRO_NAME/bin/zkEnv.sh
 
-WORKDIR $DISTRO_NAME
+WORKDIR /$DISTRO_NAME
 VOLUME ["$ZOO_DATA_DIR", "$ZOO_DATA_LOG_DIR", "$ZOO_LOG_DIR"]
 
 EXPOSE 2181 2888 3888 8080
@@ -182,7 +184,7 @@ LABEL org.opencontainers.image.url="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.documentation="https://github.com/adobe/zookeeper-operator"
 LABEL org.opencontainers.image.vendor="Adobe"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.version="3.8.4"
+LABEL org.opencontainers.image.version="${ZK_VERSION}"
 
 COPY docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]

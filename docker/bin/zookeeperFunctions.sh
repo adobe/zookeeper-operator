@@ -12,6 +12,14 @@
 
 set -ex
 
+function zkRunZu() {
+  # JVM option variables intentionally contain multiple arguments.
+  # shellcheck disable=SC2086
+  java -Xmx"${ZK_CLIENT_HEAP:-256}m" ${CLIENT_JVMFLAGS:-} \
+    -Dlogback.configurationFile=/conf/logback-quiet.xml ${ZK_OPTIONS:-} \
+    -jar /opt/libs/zu.jar "$@"
+}
+
 function zkConfig() {
   if [ -n "$1" ]; then
     FQDN="$1"

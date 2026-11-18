@@ -1,22 +1,7 @@
-# Builds the Apache ZooKeeper base image (docker/zookeeper-image) and the
-# operator-flavoured ZooKeeper image (docker/Dockerfile) on every change to
-# them, so a ZooKeeper, JDK, zu or script change is validated before a release
-# tag is pushed rather than after.
+# Validate authenticated emergency builds only on explicitly reviewed refs.
 name: zookeeper-images
 
 on:
-  pull_request:
-    paths:
-      - 'docker/**'
-      - 'scripts/zookeeper-version.sh'
-      - '.github/workflows/zookeeper-images.yaml'
-  push:
-    branches:
-      - master
-    paths:
-      - 'docker/**'
-      - 'scripts/zookeeper-version.sh'
-      - '.github/workflows/zookeeper-images.yaml'
   workflow_dispatch:
 
 permissions:
@@ -52,14 +37,26 @@ jobs:
           echo "zk_version=${zk_version}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
+      - name: Check emergency JDK download configuration
+        env:
+          JAVA_DOWNLOAD_BASE_URL: ${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
+          JAVA_DOWNLOAD_APIKEY: ${{ secrets.JAVA_DOWNLOAD_APIKEY }}
+        run: |
+          : "${JAVA_DOWNLOAD_BASE_URL:?Set the approved JDK mirror repository secret}"
+          : "${JAVA_DOWNLOAD_APIKEY:?Set the JDK mirror credential repository secret}"
 
       - name: Build Apache ZooKeeper base image
         uses: docker/build-push-action@v7
         with:
           context: docker/zookeeper-image
           platforms: linux/${{ matrix.arch }}
+          secrets: |
+            JAVA_DOWNLOAD_APIKEY=${{ secrets.JAVA_DOWNLOAD_APIKEY }}
           build-args: |
             ZK_VERSION=${{ steps.zk.outputs.zk_version }}
+            java_version=21
+            java_download_version=21.0.13.1
+            java_download_base_url=${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
           outputs: type=oci,dest=${{ runner.temp }}/zookeeper-apache,tar=false
           cache-from: type=gha,scope=zookeeper-apache-${{ matrix.arch }}
           cache-to: ${{ github.event_name == 'push' && format('type=gha,mode=max,scope=zookeeper-apache-{0}', matrix.arch) || '' }}
@@ -96,9 +93,14 @@ jobs:
             set -e
             printf "%s\n" "$zu_output"
             test "$zu_status" -eq 1
-            [[ "$zu_output" == "Usage: zu "* ]]
+            grep -q "^Usage: zu " <<<"$zu_output"
             for s in zookeeperStart.sh zookeeperReady.sh zookeeperLive.sh zookeeperTeardown.sh zookeeperMetrics.sh; do
               test -x "/usr/local/bin/${s}"
             done
             command -v dig curl socat pgrep >/dev/null
           '
+      - name: Verify patched JVM in the running ZooKeeper process
+        run: |
+          docker run --rm --entrypoint bash \
+            -v "${PWD}/scripts/test-zookeeper-image.sh:/test-zookeeper-image.sh:ro" \
+            zookeeper:ci /test-zookeeper-image.sh
