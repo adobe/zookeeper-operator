@@ -12,7 +12,9 @@ import (
 	"time"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-func newEnvtestCluster(t *testing.T) (context.Context, client.Client, *api.ZookeeperCluster) {
+func newEnvtestCluster(t *testing.T) (context.Context, client.WithWatch, *api.ZookeeperCluster) {
 	t.Helper()
 	environment := &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
@@ -41,10 +43,16 @@ func newEnvtestCluster(t *testing.T) (context.Context, client.Client, *api.Zooke
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := policyv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
 	if err := api.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	c, err := client.New(cfg, client.Options{Scheme: scheme})
+	c, err := client.NewWithWatch(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +108,11 @@ func newEnvtestCluster(t *testing.T) (context.Context, client.Client, *api.Zooke
 		t.Fatal(err)
 	}
 	return ctx, c, cluster
+}
+
+func TestEnvtestResourceWriteGuards(t *testing.T) {
+	_, c, cluster := newEnvtestCluster(t)
+	exerciseResourceWriteGuards(t, c, cluster)
 }
 
 func TestEnvtestStatusSubresource(t *testing.T) {

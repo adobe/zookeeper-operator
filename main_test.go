@@ -78,7 +78,7 @@ func TestOperatorHealthLifecycle(t *testing.T) {
 	}
 	if err := (&controllers.ZookeeperClusterReconciler{
 		Client: mgr.GetClient(), Scheme: scheme, Log: ctrl.Log,
-		ZkClient: new(zkClient.DefaultZookeeperClient),
+		NewZkClient: func() zkClient.ZookeeperClient { return new(zkClient.DefaultZookeeperClient) },
 	}).SetupWithManager(mgr); err != nil {
 		t.Fatal(err)
 	}

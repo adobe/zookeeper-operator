@@ -231,11 +231,13 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, i
 		} else if err != nil {
 			return err
 		} else {
-			foundServiceAccount.ImagePullSecrets = serviceAccount.ImagePullSecrets
-			ctrl.LoggerFrom(ctx).Info("Updating ServiceAccount", "ServiceAccount.Namespace", serviceAccount.Namespace, "ServiceAccount.Name", serviceAccount.Name)
-			err = r.Client.Update(ctx, foundServiceAccount)
-			if err != nil {
-				return err
+			if !equality.Semantic.DeepEqual(foundServiceAccount.ImagePullSecrets, serviceAccount.ImagePullSecrets) {
+				foundServiceAccount.ImagePullSecrets = serviceAccount.ImagePullSecrets
+				ctrl.LoggerFrom(ctx).Info("Updating ServiceAccount", "ServiceAccount.Namespace", serviceAccount.Namespace, "ServiceAccount.Name", serviceAccount.Name)
+				err = r.Client.Update(ctx, foundServiceAccount)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -576,6 +578,10 @@ func (r *ZookeeperClusterReconciler) reconcileConfigMap(ctx context.Context, ins
 	} else if err != nil {
 		return err
 	} else {
+		if equality.Semantic.DeepEqual(foundCm.Data, cm.Data) &&
+			equality.Semantic.DeepEqual(foundCm.BinaryData, cm.BinaryData) {
+			return nil
+		}
 		ctrl.LoggerFrom(ctx).Info("Updating existing config-map",
 			"ConfigMap.Namespace", foundCm.Namespace,
 			"ConfigMap.Name", foundCm.Name)
