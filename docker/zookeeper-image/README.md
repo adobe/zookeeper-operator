@@ -58,6 +58,11 @@ docker buildx build --load \
   -t zookeeper:local docker
 ```
 
-The `zu` helper targets Java 21 bytecode, so the full image supports both
-Java 21 and the default Java 25 runtime. The helper is built with JDK 25
-regardless of the runtime selected for the base image.
+The full image reads the base image's JDK release metadata and uses its
+Java major version for both Java and Kotlin compilation targets in `zu`.
+Set `java_version` only when building the base image; no second version
+argument is needed for the full image.
+
+The native Gradle builder uses JDK 25 independently of the selected runtime.
+For direct Gradle builds, supply the target explicitly with
+`./gradlew -PjavaVersion=21 shadowJar --no-daemon`.
