@@ -133,10 +133,10 @@ func main() {
 	}
 
 	if err = (&controllers.ZookeeperClusterReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("ZookeeperCluster"),
-		Scheme:   mgr.GetScheme(),
-		ZkClient: new(zkClient.DefaultZookeeperClient),
+		Client:      mgr.GetClient(),
+		Log:         ctrl.Log.WithName("controllers").WithName("ZookeeperCluster"),
+		Scheme:      mgr.GetScheme(),
+		NewZkClient: func() zkClient.ZookeeperClient { return new(zkClient.DefaultZookeeperClient) },
 	}).SetupWithManager(mgr); err != nil {
 		log.Error(err, "unable to create controller", "controller", "ZookeeperCluster")
 		os.Exit(1)

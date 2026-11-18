@@ -91,9 +91,9 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		err = (&zookeepercontroller.ZookeeperClusterReconciler{
-			Client:   k8sManager.GetClient(),
-			Scheme:   k8sManager.GetScheme(),
-			ZkClient: new(zkClient.DefaultZookeeperClient),
+			Client:      k8sManager.GetClient(),
+			Scheme:      k8sManager.GetScheme(),
+			NewZkClient: func() zkClient.ZookeeperClient { return new(zkClient.DefaultZookeeperClient) },
 		}).SetupWithManager(k8sManager)
 		Expect(err).ToNot(HaveOccurred())
 
