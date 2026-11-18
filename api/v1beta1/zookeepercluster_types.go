@@ -77,8 +77,23 @@ const (
 	DefaultLivenessProbeTimeoutSeconds = 10
 )
 
+// Storage admission policy (controller-gen requires the marker on one line):
+//
+//	accept = validStorage || unchangedStorage
+//
+//	validStorage =
+//	    mode is omitted, empty, or case-insensitive ephemeral/persistence
+//	    && (mode is ephemeral ? persistence is absent : ephemeral is absent)
+//
+//	unchangedStorage =
+//	    old spec exists
+//	    && storageType has the same presence and value
+//	    && persistence has the same presence and value
+//	    && ephemeral has the same presence and value
+//
+// Presence checks support legacy specs with omitted optional fields.
+
 // ZookeeperClusterSpec defines the desired state of ZookeeperCluster
-// Existing invalid storage is allowed only when all three storage fields are unchanged.
 // +kubebuilder:validation:XValidation:rule="((!has(self.storageType) || self.storageType.matches('(?i)^(ephemeral|persistence)?$')) && (has(self.storageType) && self.storageType.matches('(?i)^ephemeral$') ? !has(self.persistence) : !has(self.ephemeral))) || (oldSelf.hasValue() && has(self.storageType) == has(oldSelf.value().storageType) && (!has(self.storageType) || self.storageType == oldSelf.value().storageType) && has(self.persistence) == has(oldSelf.value().persistence) && (!has(self.persistence) || self.persistence == oldSelf.value().persistence) && has(self.ephemeral) == has(oldSelf.value().ephemeral) && (!has(self.ephemeral) || self.ephemeral == oldSelf.value().ephemeral))",message="storageType must be ephemeral or persistence (case-insensitive) with only its matching storage block; invalid legacy storage must stay unchanged or be corrected",optionalOldSelf=true
 type ZookeeperClusterSpec struct {
 	// Image is the  container image. default is zookeeper:0.2.10

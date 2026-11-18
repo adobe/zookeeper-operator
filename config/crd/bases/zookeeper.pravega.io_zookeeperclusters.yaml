@@ -68,9 +68,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              ZookeeperClusterSpec defines the desired state of ZookeeperCluster
-              Existing invalid storage is allowed only when all three storage fields are unchanged.
+            description: ZookeeperClusterSpec defines the desired state of ZookeeperCluster
             properties:
               adminServerService:
                 description: |-
