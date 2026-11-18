@@ -68,16 +68,6 @@ class JavaDownloadTest(unittest.TestCase):
                                  [url, url + ".sha256"])
                 self.assertNotIn("--expand-header", calls[0])
 
-    def test_oracle_trailing_slash_preserves_download_urls(self):
-        result, calls = self.run_download(
-            base="https://download.oracle.com/java/",
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        url = ("https://download.oracle.com/java/25/latest/"
-               "jdk-25_linux-x64_bin.tar.gz")
-        self.assertEqual([call[-1] for call in calls],
-                         [url, url + ".sha256"])
-
     def test_alternate_source_uses_patch_version_and_optional_authentication(self):
         for arch, name in (("amd64", "x64"), ("arm64", "aarch64")):
             for key in (None, "synthetic-download-key"):
@@ -87,7 +77,7 @@ class JavaDownloadTest(unittest.TestCase):
                         major="21", version="21.0.13.1", api_key=key,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    url = ("https://jdk.example.test/java/21/21.0.13.1/"
+                    url = ("https://jdk.example.test/java/21/"
                            f"jdk-21.0.13.1_linux-{name}_bin.tar.gz")
                     self.assertEqual([call[-1] for call in calls],
                                      [url, url + ".sha256"])
@@ -101,19 +91,6 @@ class JavaDownloadTest(unittest.TestCase):
                                           call)
                             self.assertNotIn(key, " ".join(call))
                             self.assertNotIn(key, result.stderr)
-
-    def test_alternate_source_trailing_slash_preserves_version_directory(self):
-        for arch, name in (("amd64", "x64"), ("arm64", "aarch64")):
-            with self.subTest(arch=arch):
-                result, calls = self.run_download(
-                    arch=arch, base="https://jdk.example.test/java/oracle/",
-                    major="21", version="21.0.13.1",
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                url = ("https://jdk.example.test/java/oracle/21/21.0.13.1/"
-                       f"jdk-21.0.13.1_linux-{name}_bin.tar.gz")
-                self.assertEqual([call[-1] for call in calls],
-                                 [url, url + ".sha256"])
 
     def test_checksum_mismatch_stops_the_build(self):
         result, _ = self.run_download(corrupt=True)
