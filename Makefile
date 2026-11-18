@@ -183,7 +183,7 @@ setup-envtest: $(LOCALBIN)
 test-envtest: setup-envtest
 	@assets="$$("$(SETUP_ENVTEST)" use "$(ENVTEST_K8S_VERSION)" --bin-dir "$(LOCALBIN)/k8s" -p path)" && \
 		test -x "$$assets/kube-apiserver" && test -x "$$assets/etcd" && test -x "$$assets/kubectl" && \
-		KUBEBUILDER_ASSETS="$$assets" go test -tags=envtest ./controllers -run '^TestEnvtest' -count=1 -v
+		KUBEBUILDER_ASSETS="$$assets" go test -tags=envtest . ./controllers -count=1 -v
 
 test-e2e: test-e2e-remote
 
