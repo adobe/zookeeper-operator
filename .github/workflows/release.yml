@@ -123,6 +123,13 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: docker/zookeeper-image
+          # Enable these together when selecting an alternate JDK release:
+          # secrets: |
+          #   JAVA_DOWNLOAD_APIKEY=${{ secrets.JAVA_DOWNLOAD_APIKEY }}
+          # Add these overrides under build-args:
+          # java_version=25
+          # java_download_base_url=${{ secrets.JAVA_DOWNLOAD_BASE_URL }}
+          # java_download_version=25.0.1.1
           platforms: linux/amd64,linux/arm64
           build-args: |
             ZK_VERSION=${{ needs.prepare.outputs.zk_version }}
