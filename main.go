@@ -26,8 +26,6 @@ import (
 	"github.com/pravega/zookeeper-operator/pkg/version"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
 	"github.com/sirupsen/logrus"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,7 +33,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -160,14 +157,6 @@ func main() {
 }
 
 func configureHealthChecks(ctx context.Context, mgr manager.Manager) error {
-	// Register existing watches before startup so initial cache sync cannot be empty.
-	for _, object := range []client.Object{
-		&api.ZookeeperCluster{}, &appsv1.StatefulSet{}, &corev1.Service{}, &corev1.Pod{},
-	} {
-		if _, err := mgr.GetCache().GetInformer(ctx, object, cache.BlockUntilSynced(false)); err != nil {
-			return fmt.Errorf("initialize probe cache: %w", err)
-		}
-	}
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		return err
 	}

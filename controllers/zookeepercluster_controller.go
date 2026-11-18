@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -837,11 +838,19 @@ func (r *ZookeeperClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.APIReader == nil {
 		r.APIReader = mgr.GetAPIReader()
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&zookeeperv1beta1.ZookeeperCluster{}).
-		Owns(&appsv1.StatefulSet{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.Pod{}).
+	primary := &zookeeperv1beta1.ZookeeperCluster{}
+	owned := []client.Object{&appsv1.StatefulSet{}, &corev1.Service{}, &corev1.Pod{}}
+	controller := ctrl.NewControllerManagedBy(mgr).For(primary)
+	for _, object := range owned {
+		controller.Owns(object)
+	}
+	// Initialize the same watches eagerly so manager startup waits for their caches.
+	for _, object := range append([]client.Object{primary}, owned...) {
+		if _, err := mgr.GetCache().GetInformer(context.TODO(), object, cache.BlockUntilSynced(false)); err != nil {
+			return fmt.Errorf("initialize cache for %T: %w", object, err)
+		}
+	}
+	return controller.
 		WithEventFilter(reconcileEventPredicate()).
 		Complete(r)
 }
