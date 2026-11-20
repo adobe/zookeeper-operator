@@ -21,6 +21,25 @@
   The bundled roles already include these permissions. A Ready operator Pod
   does not prove that the operator can write these resources.
 
+### Headless DNS on clusters created with `make run-local`
+
+Older local binaries recorded Service writes under the generic `main` field
+manager. The upgrade does not transfer Service fields from `main`, because that
+name can also represent an unrelated writer. If you clear `spec.domainName`, a
+legacy `external-dns.alpha.kubernetes.io/hostname` annotation may remain on the
+headless Service.
+
+If the Service belongs to the current cluster UID, neither `spec.domainName` nor
+`spec.headlessService.annotations` requests that hostname, and your old cluster
+configuration confirms that the operator generated the live annotation, remove
+just that key from the headless Service. Do not remove it if another controller
+or owner manages it intentionally.
+
+```sh
+kubectl -n <namespace> annotate service <cluster-name>-headless \
+  external-dns.alpha.kubernetes.io/hostname-
+```
+
 ## Upgrade the operator
 
 zookeeperoperator can be upgraded to a version **[VERSION]** via helm using the following command

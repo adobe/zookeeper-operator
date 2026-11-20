@@ -79,13 +79,13 @@ func uniqueBy[T any, K comparable](values []T, key func(T) K) []T {
 // then restore the exact ordered lists and let the API server validate one guarded patch.
 func (r *ZookeeperClusterReconciler) applyCompatibleStatefulSet(ctx context.Context, current, prepared, intent, desired *appsv1.StatefulSet, retiringVolumes []corev1.Volume) error {
 	next := &appsv1.StatefulSet{}
-	if err := r.mergeWorkloadLocally(prepared, intent, next); err != nil {
+	if err := r.mergeWorkloadLocally(current, prepared, intent, next); err != nil {
 		return err
 	}
 	if resolveRetiringVolumes(prepared, intent, next, retiringVolumes) {
 		// Keep complete sources while referenced; don't persist orphaned fragments.
 		next = &appsv1.StatefulSet{}
-		if err := r.mergeWorkloadLocally(prepared, intent, next); err != nil {
+		if err := r.mergeWorkloadLocally(current, prepared, intent, next); err != nil {
 			return err
 		}
 	}
@@ -99,10 +99,10 @@ func (r *ZookeeperClusterReconciler) applyCompatibleStatefulSet(ctx context.Cont
 	return nil
 }
 
-func (r *ZookeeperClusterReconciler) mergeWorkloadLocally(prepared, intent, next client.Object) error {
+func (r *ZookeeperClusterReconciler) mergeWorkloadLocally(current, prepared, intent, next client.Object) error {
 	gvk := intent.GetObjectKind().GroupVersionKind()
 	prepared.GetObjectKind().SetGroupVersionKind(gvk)
-	if err := csaupgrade.UpgradeManagedFields(prepared, legacyFieldManagers, applyFieldManager); err != nil {
+	if err := csaupgrade.UpgradeManagedFields(prepared, legacyManagersFor(current), applyFieldManager); err != nil {
 		return err
 	}
 	manager, err := managedfields.NewDefaultFieldManager(applyconfigs.NewTypeConverter(r.Scheme), r.Scheme, r.Scheme, r.Scheme, gvk, gvk.GroupVersion(), "", nil)

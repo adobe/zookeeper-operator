@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
 // applyFieldManager owns the StatefulSet and Service fields that the operator renders.
@@ -28,6 +29,20 @@ const createFieldManager = "zookeeper-operator-create"
 // Fields owned by Create and Update managers move to applyFieldManager so that an apply
 // can remove fields the operator no longer renders.
 var legacyFieldManagers = sets.New("zookeeper-operator", createFieldManager)
+
+func legacyManagersFor(current client.Object) sets.Set[string] {
+	// make run-local wrote as "main". Only migrate that generic manager when
+	// it owns the legacy operator's StatefulSet bookkeeping label.
+	if _, ok := current.(*appsv1.StatefulSet); ok && current.GetLabels()["owner-rv"] != "" {
+		marker := fieldpath.NewSet(fieldpath.MakePathOrDie("metadata", "labels", "owner-rv"))
+		for _, owner := range csaupgrade.FindFieldsOwners(current.GetManagedFields(), metav1.ManagedFieldsOperationUpdate, marker) {
+			if owner.Manager == "main" && owner.Subresource == "" {
+				return legacyFieldManagers.Union(sets.New("main"))
+			}
+		}
+	}
+	return legacyFieldManagers
+}
 
 // applyStatefulSet updates an existing StatefulSet without changing its immutable fields.
 func (r *ZookeeperClusterReconciler) applyStatefulSet(ctx context.Context, current, desired *appsv1.StatefulSet) error {
@@ -92,7 +107,7 @@ func (r *ZookeeperClusterReconciler) applyService(ctx context.Context, cluster *
 	}
 	// Publish the type, ports, and annotations together or not at all.
 	next := &corev1.Service{}
-	if err := r.mergeWorkloadLocally(prepared, intent, next); err != nil {
+	if err := r.mergeWorkloadLocally(current, prepared, intent, next); err != nil {
 		return err
 	}
 	next.Status = current.Status
@@ -117,7 +132,7 @@ func (r *ZookeeperClusterReconciler) apply(ctx context.Context, current, intent 
 	if current.GetResourceVersion() == "" {
 		return fmt.Errorf("cannot apply %T %s without a resource version", current, client.ObjectKeyFromObject(current))
 	}
-	migration, err := csaupgrade.UpgradeManagedFieldsPatch(current, legacyFieldManagers, applyFieldManager)
+	migration, err := csaupgrade.UpgradeManagedFieldsPatch(current, legacyManagersFor(current), applyFieldManager)
 	if err != nil {
 		return err
 	}

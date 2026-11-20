@@ -113,7 +113,7 @@ func matchesSeccompProfile(annotation string, profile *corev1.SeccompProfile) bo
 
 func statefulSetFields(current *appsv1.StatefulSet) (operator, external *fieldpath.Set) {
 	operator, external = fieldpath.NewSet(), fieldpath.NewSet()
-	legacy := legacyFieldManagers
+	legacy := legacyManagersFor(current)
 	for _, entry := range current.ManagedFields {
 		if entry.Subresource != "" || entry.FieldsV1 == nil || entry.APIVersion != "apps/v1" {
 			continue

@@ -8,9 +8,11 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"testing"
 
+	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	"github.com/pravega/zookeeper-operator/pkg/zk"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -687,4 +689,48 @@ func TestEnvtestSeccompProfileReplacesConflictingLegacyAnnotation(t *testing.T) 
 		t.Fatal("completing the ownership migration triggered a second template change")
 	}
 	assertEnvtestSettled(t, ctx, r, cl, z, 3)
+}
+
+func TestEnvtestMigratesLegacyLocalRunner(t *testing.T) {
+	for _, initialLogging := range []string{"INFO", "WARN"} {
+		t.Run(initialLogging, func(t *testing.T) {
+			ctx, cl, z := newEnvtestCluster(t)
+			z.Spec.Logging = api.LoggingConfig{Level: initialLogging}
+			z.Spec.Pod.NodeSelector = map[string]string{"pool": "old"}
+			if err := cl.Update(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			sts := zk.MakeStatefulSet(z)
+			sts.Labels = maps.Clone(sts.Labels)
+			sts.Labels["owner-rv"] = z.ResourceVersion
+			if err := controllerutil.SetControllerReference(z, sts, cl.Scheme()); err != nil {
+				t.Fatal(err)
+			}
+			if err := cl.Create(ctx, sts, client.FieldOwner("main")); err != nil {
+				t.Fatal(err)
+			}
+			z.Spec.Pod.NodeSelector = nil
+			if initialLogging == "INFO" {
+				z.Spec.Logging.Level = "WARN"
+			} else {
+				z.Spec.Logging.Level = "INFO"
+			}
+			if err := cl.Update(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if err := convergenceReconciler(cl).reconcileStatefulSet(ctx, z); err != nil {
+				t.Fatal(err)
+			}
+			if err := cl.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
+				t.Fatal(err)
+			}
+			template := sts.Spec.Template
+			if len(template.Spec.NodeSelector) != 0 || template.Spec.Volumes[0].Projected == nil {
+				t.Fatal("local runner did not converge scheduling and logging fields")
+			}
+			if _, present := template.Annotations["zookeeper.pravega.io/logback-hash"]; present != (z.Spec.Logging.Level == "WARN") {
+				t.Fatal("logging hash did not follow the requested configuration")
+			}
+		})
+	}
 }
