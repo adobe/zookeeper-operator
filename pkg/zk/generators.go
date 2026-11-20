@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -333,8 +334,13 @@ func makeZkConfigString(z *v1beta1.ZookeeperCluster) string {
 	ports := z.ZookeeperPorts()
 
 	var zkConfig = ""
-	for key, value := range z.Spec.Conf.AdditionalConfig {
-		zkConfig = zkConfig + fmt.Sprintf("%s=%s\n", key, value)
+	keys := make([]string, 0, len(z.Spec.Conf.AdditionalConfig))
+	for key := range z.Spec.Conf.AdditionalConfig {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		zkConfig = zkConfig + fmt.Sprintf("%s=%s\n", key, z.Spec.Conf.AdditionalConfig[key])
 	}
 	return zkConfig + "4lw.commands.whitelist=cons, envi, conf, crst, srvr, stat, mntr, ruok\n" +
 		"dataDir=/data\n" +
@@ -469,6 +475,7 @@ func makeService(name string, ports []v1.ServicePort, clusterIP bool, external b
 			Annotations: annotationMap,
 		},
 		Spec: v1.ServiceSpec{
+			Type:     v1.ServiceTypeClusterIP,
 			Ports:    ports,
 			Selector: map[string]string{"app": z.GetName()},
 		},
