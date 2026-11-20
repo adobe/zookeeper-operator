@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func TestMetadataCreateWaitsForServingZooKeeper(t *testing.T) {
@@ -228,17 +229,20 @@ func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 		cluster.WithDefaults()
 		cluster.Spec.Replicas = 1
 		sts := operatorzk.MakeStatefulSet(cluster)
+		if err := controllerutil.SetControllerReference(cluster, sts, s); err != nil {
+			t.Fatal(err)
+		}
 		sts.Status.Replicas = 1
 		sts.Status.ReadyReplicas = 1
 		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(cluster, sts).WithStatusSubresource(cluster, sts).Build()
 		conflict := true
 		faultClient := interceptor.NewClient(cl, interceptor.Funcs{
-			SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			SubResourcePatch: func(ctx context.Context, c client.Client, subresource string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 				if subresource == "status" && conflict {
 					conflict = false
 					return apierrors.NewConflict(schema.GroupResource{Group: v1beta1.GroupVersion.Group, Resource: "zookeeperclusters"}, obj.GetName(), errors.New("stale writer"))
 				}
-				return c.SubResource(subresource).Update(ctx, obj, opts...)
+				return c.SubResource(subresource).Patch(ctx, obj, patch, opts...)
 			},
 		})
 		r := &controllers.ZookeeperClusterReconciler{
