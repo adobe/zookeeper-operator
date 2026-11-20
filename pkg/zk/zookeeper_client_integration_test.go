@@ -10,6 +10,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"sync"
@@ -25,12 +27,123 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+func TestMetadataCreateWaitsForServingZooKeeper(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	responses := []string{
+		"",
+		"imok",
+		"This ZooKeeper instance is not currently serving requests\n",
+		"Zookeeper version: 3.9.7, built on 2026-10-22 14:12 UTC\nMode: standalone\n",
+	}
+	commands := make(chan string, len(responses))
+	served := make(chan error, 1)
+	go func() {
+		for _, response := range responses {
+			conn, err := listener.Accept()
+			if err != nil {
+				served <- err
+				return
+			}
+			if err = conn.SetDeadline(time.Now().Add(5 * time.Second)); err == nil {
+				command := make([]byte, 4)
+				if _, err = io.ReadFull(conn, command); err == nil {
+					commands <- string(command)
+					_, err = io.WriteString(conn, response)
+				}
+			}
+			_ = conn.Close()
+			if err != nil {
+				served <- err
+				return
+			}
+		}
+		served <- nil
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := waitForMetadataZooKeeper(ctx, listener.Addr().String()); err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != len(responses) {
+		t.Fatalf("readiness returned before ZooKeeper served requests: probes=%d, want %d", len(commands), len(responses))
+	}
+	if err := <-served; err != nil {
+		t.Fatal(err)
+	}
+	close(commands)
+	for command := range commands {
+		if command != "srvr" {
+			t.Errorf("readiness command = %q, want srvr", command)
+		}
+	}
+}
+
+func TestMetadataCreateReadinessDeadline(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	release := make(chan struct{})
+	defer close(release)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		<-release
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- waitForMetadataZooKeeper(ctx, listener.Addr().String())
+	}()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("stalled readiness probe = %v, want context deadline exceeded", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("stalled readiness probe ignored its context deadline")
+	}
+}
+
+func waitForMetadataZooKeeper(ctx context.Context, address string) error {
+	return wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		dialer := net.Dialer{Timeout: time.Second}
+		conn, err := dialer.DialContext(ctx, "tcp", address)
+		if err != nil {
+			return false, nil
+		}
+		defer func() { _ = conn.Close() }()
+		deadline := time.Now().Add(time.Second)
+		if timeout, ok := ctx.Deadline(); ok && timeout.Before(deadline) {
+			deadline = timeout
+		}
+		if err := conn.SetDeadline(deadline); err != nil {
+			return false, err
+		}
+		if _, err := io.WriteString(conn, "srvr"); err != nil {
+			return false, nil
+		}
+		response, err := io.ReadAll(io.LimitReader(conn, 4096))
+		return err == nil && strings.Contains("\n"+string(response), "\nMode: standalone\n"), nil
+	})
+}
 
 func TestMetadataCreateRetryPreservesExistingData(t *testing.T) {
 	address, conn, suffix := startMetadataZooKeeper(t)
@@ -206,6 +319,12 @@ func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 		t.Fatalf("discover ZooKeeper port: %v\n%s", err, output)
 	}
 	address := strings.TrimSpace(string(output))
+	readyCtx, stopReady := context.WithTimeout(ctx, 20*time.Second)
+	defer stopReady()
+	// A bound port (or ruok/imok) does not mean ZooKeeper can safely open sessions.
+	if err := waitForMetadataZooKeeper(readyCtx, address); err != nil {
+		t.Fatalf("wait for ZooKeeper to serve requests: %v", err)
+	}
 	conn, events, err := zk.Connect([]string{address}, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -216,8 +335,6 @@ func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 		deadline.Stop()
 		closeConn()
 	})
-	ready := time.NewTimer(20 * time.Second)
-	defer ready.Stop()
 	for {
 		select {
 		case event, open := <-events:
@@ -227,7 +344,7 @@ func startMetadataZooKeeper(t *testing.T) (string, *zk.Conn, string) {
 			if event.State == zk.StateHasSession {
 				return address, conn, suffix
 			}
-		case <-ready.C:
+		case <-readyCtx.Done():
 			t.Fatal("timed out waiting for ZooKeeper session readiness")
 		}
 	}

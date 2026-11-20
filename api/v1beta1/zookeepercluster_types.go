@@ -77,7 +77,24 @@ const (
 	DefaultLivenessProbeTimeoutSeconds = 10
 )
 
+// Storage admission policy (controller-gen requires the marker on one line):
+//
+//	accept = validStorage || unchangedStorage
+//
+//	validStorage =
+//	    mode is omitted, empty, or case-insensitive ephemeral/persistence
+//	    && (mode is ephemeral ? persistence is absent : ephemeral is absent)
+//
+//	unchangedStorage =
+//	    old spec exists
+//	    && storageType has the same presence and value
+//	    && persistence has the same presence and value
+//	    && ephemeral has the same presence and value
+//
+// Presence checks support legacy specs with omitted optional fields.
+
 // ZookeeperClusterSpec defines the desired state of ZookeeperCluster
+// +kubebuilder:validation:XValidation:rule="((!has(self.storageType) || self.storageType.matches('(?i)^(ephemeral|persistence)?$')) && (has(self.storageType) && self.storageType.matches('(?i)^ephemeral$') ? !has(self.persistence) : !has(self.ephemeral))) || (oldSelf.hasValue() && has(self.storageType) == has(oldSelf.value().storageType) && (!has(self.storageType) || self.storageType == oldSelf.value().storageType) && has(self.persistence) == has(oldSelf.value().persistence) && (!has(self.persistence) || self.persistence == oldSelf.value().persistence) && has(self.ephemeral) == has(oldSelf.value().ephemeral) && (!has(self.ephemeral) || self.ephemeral == oldSelf.value().ephemeral))",message="storageType must be ephemeral or persistence (case-insensitive) with only its matching storage block; invalid legacy storage must stay unchanged or be corrected",optionalOldSelf=true
 type ZookeeperClusterSpec struct {
 	// Image is the  container image. default is zookeeper:0.2.10
 	Image ContainerImage `json:"image,omitempty"`
@@ -117,17 +134,16 @@ type ZookeeperClusterSpec struct {
 	// for the zookeeper cluster.
 	HeadlessService HeadlessServicePolicy `json:"headlessService,omitempty"`
 
-	//StorageType is used to tell which type of storage we will be using
-	//It can take either Ephemeral or persistence
-	//Default StorageType is Persistence storage
+	// StorageType selects ephemeral or persistence storage, case-insensitively.
+	// An omitted or empty value selects persistence storage.
 	StorageType string `json:"storageType,omitempty"`
 
 	// Persistence is the configuration for zookeeper persistent layer.
 	// PersistentVolumeClaimSpec and VolumeReclaimPolicy can be specified in here.
 	Persistence *Persistence `json:"persistence,omitempty"`
 
-	// Ephemeral is the configuration which helps create ephemeral storage
-	// At anypoint only one of Persistence or Ephemeral should be present in the manifest
+	// Ephemeral configures ephemeral storage and requires storageType ephemeral.
+	// Only the storage block matching StorageType may be present.
 	Ephemeral *Ephemeral `json:"ephemeral,omitempty"`
 
 	// Conf is the zookeeper configuration, which will be used to generate the
@@ -789,6 +805,7 @@ type Persistence struct {
 	// VolumeReclaimPolicy is a zookeeper operator configuration. If it's set to Delete,
 	// the corresponding PVCs will be deleted by the operator when zookeeper cluster is deleted.
 	// The default value is Retain.
+	// +kubebuilder:default=Retain
 	// +kubebuilder:validation:Enum="Delete";"Retain"
 	VolumeReclaimPolicy VolumeReclaimPolicy `json:"reclaimPolicy,omitempty"`
 	// PersistentVolumeClaimSpec is the spec to describe PVC for the container
