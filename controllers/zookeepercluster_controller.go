@@ -12,6 +12,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -103,6 +105,7 @@ func (r *ZookeeperClusterReconciler) Reconcile(ctx context.Context, request ctrl
 	if err := instance.Spec.ValidateLogging(); err != nil {
 		return reconcile.Result{}, err
 	}
+	original := instance.DeepCopy()
 	changed := instance.WithDefaults()
 	if instance.GetTriggerRollingRestart() {
 		ctrl.LoggerFrom(ctx).Info("Restarting zookeeper cluster")
@@ -116,7 +119,7 @@ func (r *ZookeeperClusterReconciler) Reconcile(ctx context.Context, request ctrl
 	}
 	if changed {
 		ctrl.LoggerFrom(ctx).Info("Setting default settings for zookeeper-cluster")
-		if err := r.Client.Update(ctx, instance); err != nil {
+		if err := r.Client.Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{Requeue: true}, nil
@@ -146,41 +149,6 @@ func getRollingRestartAnnotation() (string, string) {
 	return "restartTime", time.Now().Format(time.RFC850)
 }
 
-// compareResourceVersion compare resoure versions for the supplied ZookeeperCluster and StatefulSet
-// resources
-// Returns:
-// 0 if versions are equal
-// -1 if ZookeeperCluster version is less than StatefulSet version
-// 1 if ZookeeperCluster version is greater than StatefulSet version
-func compareResourceVersion(zk *zookeeperv1beta1.ZookeeperCluster, sts *appsv1.StatefulSet) int {
-
-	zkResourceVersion, zkErr := strconv.Atoi(zk.ResourceVersion)
-	stsVersion, stsVersionFound := sts.Labels["owner-rv"]
-
-	if !stsVersionFound {
-		if zkErr != nil {
-			log.Info("Fail to parse ZookeeperCluster version. Cannot decide zookeeper StatefulSet version")
-			return 0
-		}
-		return 1
-	}
-	stsResourceVersion, err := strconv.Atoi(stsVersion)
-	if err != nil {
-		if zkErr != nil {
-			log.Info("Fail to parse ZookeeperCluster version. Cannot decide zookeeper StatefulSet version")
-			return 0
-		}
-		log.Info("Fail to convert StatefulSet version %s to integer; setting it to ZookeeperCluster version", stsVersion)
-		return 1
-	}
-	if zkResourceVersion < stsResourceVersion {
-		return -1
-	} else if zkResourceVersion > stsResourceVersion {
-		return 1
-	}
-	return 0
-}
-
 func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, instance *zookeeperv1beta1.ZookeeperCluster) (err error) {
 
 	// we cannot upgrade if cluster is in UpgradeFailed
@@ -195,8 +163,7 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, i
 			Namespace: sts.Namespace,
 		}, foundSts)
 		if err == nil {
-			err = r.Client.Update(ctx, foundSts)
-			if err != nil {
+			if err := requireClusterOwner(instance, foundSts, "statefulset"); err != nil {
 				return err
 			}
 			if foundSts.Status.Replicas == foundSts.Status.ReadyReplicas && foundSts.Status.CurrentRevision == foundSts.Status.UpdateRevision {
@@ -232,9 +199,10 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, i
 			return err
 		} else {
 			if !equality.Semantic.DeepEqual(foundServiceAccount.ImagePullSecrets, serviceAccount.ImagePullSecrets) {
+				original := foundServiceAccount.DeepCopy()
 				foundServiceAccount.ImagePullSecrets = serviceAccount.ImagePullSecrets
 				ctrl.LoggerFrom(ctx).Info("Updating ServiceAccount", "ServiceAccount.Namespace", serviceAccount.Namespace, "ServiceAccount.Name", serviceAccount.Name)
-				err = r.Client.Update(ctx, foundServiceAccount)
+				err = r.Client.Patch(ctx, foundServiceAccount, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 				if err != nil {
 					return err
 				}
@@ -255,23 +223,16 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, i
 			"StatefulSet.Namespace", sts.Namespace,
 			"StatefulSet.Name", sts.Name)
 		zk.EnsureLogbackProjection(instance, nil, sts)
-		// label the RV of the zookeeperCluster when creating the sts
-		sts.Labels["owner-rv"] = instance.ResourceVersion
-		err = r.Client.Create(ctx, sts)
-		if err != nil {
-			return err
-		}
-		return nil
+		return r.Client.Create(ctx, sts, client.FieldOwner(createFieldManager))
 	} else if err != nil {
 		return err
 	} else {
-		// check whether zookeeperCluster is updated before updating the sts
-		cmp := compareResourceVersion(instance, foundSts)
-		if cmp < 0 {
-			return fmt.Errorf("Staleness: cr.ResourceVersion %s is smaller than labeledRV %s", instance.ResourceVersion, foundSts.Labels["owner-rv"])
-		} else if cmp > 0 {
-			// Zookeeper StatefulSet version inherits ZookeeperCluster resource version
-			foundSts.Labels["owner-rv"] = instance.ResourceVersion
+		if err := requireClusterOwner(instance, foundSts, "statefulset"); err != nil {
+			return err
+		}
+		// Read the parent after the child. Its resource version cannot fence stale parent intent.
+		if err := r.requireCurrentClusterSpec(ctx, instance); err != nil {
+			return err
 		}
 		zk.EnsureLogbackProjection(instance, foundSts, sts)
 		foundSTSSize := *foundSts.Spec.Replicas
@@ -293,6 +254,12 @@ func (r *ZookeeperClusterReconciler) reconcileStatefulSet(ctx context.Context, i
 			if err != nil {
 				return fmt.Errorf("error doing exists check for znode %s: %w", path, err)
 			}
+			if err := r.requireCurrentClusterSpec(zkCtx, instance); err != nil {
+				return err
+			}
+			if err := r.requireCurrentStatefulSet(zkCtx, foundSts); err != nil {
+				return err
+			}
 
 			data := "CLUSTER_SIZE=" + strconv.Itoa(int(newSTSSize))
 			ctrl.LoggerFrom(ctx).Info("Updating Cluster Size.", "New Data:", data, "Version", version)
@@ -312,10 +279,7 @@ func (r *ZookeeperClusterReconciler) updateStatefulSet(ctx context.Context, inst
 	ctrl.LoggerFrom(ctx).Info("Updating StatefulSet",
 		"StatefulSet.Namespace", foundSts.Namespace,
 		"StatefulSet.Name", foundSts.Name)
-	zk.SyncStatefulSet(foundSts, sts)
-
-	err = r.Client.Update(ctx, foundSts)
-	if err != nil {
+	if err := r.applyStatefulSet(ctx, foundSts, sts); err != nil {
 		return err
 	}
 	instance.Status.Replicas = foundSts.Status.Replicas
@@ -366,30 +330,20 @@ func (r *ZookeeperClusterReconciler) upgradeStatefulSet(ctx context.Context, ins
 				err = checkSyncTimeout(instance, zookeeperv1beta1.UpdatingZookeeperReason, foundSts.Status.UpdatedReplicas, 10*time.Minute)
 				if err != nil {
 					instance.Status.SetErrorConditionTrue("UpgradeFailed", err.Error())
-					return r.Client.Status().Update(ctx, instance)
+					return r.patchClusterStatus(ctx, instance)
 				} else {
 					return nil
 				}
 			}
 		}
 	}
-	return r.Client.Status().Update(ctx, instance)
+	return r.patchClusterStatus(ctx, instance)
 }
 
 func (r *ZookeeperClusterReconciler) clearUpgradeStatus(ctx context.Context, z *zookeeperv1beta1.ZookeeperCluster) (err error) {
 	z.Status.SetUpgradingConditionFalse()
 	z.Status.TargetVersion = ""
-	// need to deep copy the status struct, otherwise it will be overwritten
-	// when updating the CR below
-	status := z.Status.DeepCopy()
-
-	err = r.Client.Update(ctx, z)
-	if err != nil {
-		return err
-	}
-
-	z.Status = *status
-	return nil
+	return r.patchClusterStatus(ctx, z)
 }
 
 func checkSyncTimeout(z *zookeeperv1beta1.ZookeeperCluster, reason string, updatedReplicas int32, t time.Duration) error {
@@ -423,19 +377,14 @@ func (r *ZookeeperClusterReconciler) reconcileClientService(ctx context.Context,
 		ctrl.LoggerFrom(ctx).Info("Creating new client service",
 			"Service.Namespace", svc.Namespace,
 			"Service.Name", svc.Name)
-		err = r.Client.Create(ctx, svc)
-		if err != nil {
-			return err
-		}
-		return nil
+		return r.Client.Create(ctx, svc, client.FieldOwner(createFieldManager))
 	} else if err != nil {
 		return err
 	} else {
 		ctrl.LoggerFrom(ctx).Info("Updating existing client service",
 			"Service.Namespace", foundSvc.Namespace,
 			"Service.Name", foundSvc.Name)
-		zk.SyncService(foundSvc, svc)
-		err = r.Client.Update(ctx, foundSvc)
+		err = r.applyService(ctx, instance, foundSvc, svc)
 		if err != nil {
 			return err
 		}
@@ -470,19 +419,14 @@ func (r *ZookeeperClusterReconciler) reconcileHeadlessService(ctx context.Contex
 		ctrl.LoggerFrom(ctx).Info("Creating new headless service",
 			"Service.Namespace", svc.Namespace,
 			"Service.Name", svc.Name)
-		err = r.Client.Create(ctx, svc)
-		if err != nil {
-			return err
-		}
-		return nil
+		return r.Client.Create(ctx, svc, client.FieldOwner(createFieldManager))
 	} else if err != nil {
 		return err
 	} else {
 		ctrl.LoggerFrom(ctx).Info("Updating existing headless service",
 			"Service.Namespace", foundSvc.Namespace,
 			"Service.Name", foundSvc.Name)
-		zk.SyncService(foundSvc, svc)
-		err = r.Client.Update(ctx, foundSvc)
+		err = r.applyService(ctx, instance, foundSvc, svc)
 		if err != nil {
 			return err
 		}
@@ -504,19 +448,14 @@ func (r *ZookeeperClusterReconciler) reconcileAdminServerService(ctx context.Con
 		ctrl.LoggerFrom(ctx).Info("Creating admin server service",
 			"Service.Namespace", svc.Namespace,
 			"Service.Name", svc.Name)
-		err = r.Client.Create(ctx, svc)
-		if err != nil {
-			return err
-		}
-		return nil
+		return r.Client.Create(ctx, svc, client.FieldOwner(createFieldManager))
 	} else if err != nil {
 		return err
 	} else {
 		ctrl.LoggerFrom(ctx).Info("Updating existing admin server service",
 			"Service.Namespace", foundSvc.Namespace,
 			"Service.Name", foundSvc.Name)
-		zk.SyncService(foundSvc, svc)
-		err = r.Client.Update(ctx, foundSvc)
+		err = r.applyService(ctx, instance, foundSvc, svc)
 		if err != nil {
 			return err
 		}
@@ -553,7 +492,7 @@ func (r *ZookeeperClusterReconciler) reconcilePodDisruptionBudget(ctx context.Co
 	if equality.Semantic.DeepEqual(original.Spec, foundPdb.Spec) {
 		return nil
 	}
-	return r.Client.Patch(ctx, foundPdb, client.MergeFrom(original))
+	return r.Client.Patch(ctx, foundPdb, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
 
 func (r *ZookeeperClusterReconciler) reconcileConfigMap(ctx context.Context, instance *zookeeperv1beta1.ZookeeperCluster) (err error) {
@@ -585,8 +524,9 @@ func (r *ZookeeperClusterReconciler) reconcileConfigMap(ctx context.Context, ins
 		ctrl.LoggerFrom(ctx).Info("Updating existing config-map",
 			"ConfigMap.Namespace", foundCm.Namespace,
 			"ConfigMap.Name", foundCm.Name)
+		original := foundCm.DeepCopy()
 		zk.SyncConfigMap(foundCm, cm)
-		err = r.Client.Update(ctx, foundCm)
+		err = r.Client.Patch(ctx, foundCm, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 		if err != nil {
 			return err
 		}
@@ -626,6 +566,8 @@ func (r *ZookeeperClusterReconciler) reconcileClusterStatus(ctx context.Context,
 			unreadyMembers = append(unreadyMembers, p.Name)
 		}
 	}
+	sort.Strings(readyMembers)
+	sort.Strings(unreadyMembers)
 	instance.Status.Members.Ready = readyMembers
 	instance.Status.Members.Unready = unreadyMembers
 
@@ -660,7 +602,66 @@ func (r *ZookeeperClusterReconciler) reconcileClusterStatus(ctx context.Context,
 	if instance.Status.CurrentVersion == "" && instance.Status.IsClusterInReadyState() {
 		instance.Status.CurrentVersion = instance.Spec.Image.Tag
 	}
-	return r.Client.Status().Update(ctx, instance)
+	return r.patchClusterStatus(ctx, instance)
+}
+
+func (r *ZookeeperClusterReconciler) patchClusterStatus(ctx context.Context, instance *zookeeperv1beta1.ZookeeperCluster) error {
+	current := &zookeeperv1beta1.ZookeeperCluster{}
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(instance), current); err != nil {
+		return err
+	}
+	if current.ResourceVersion != instance.ResourceVersion || current.UID != instance.UID {
+		return staleCluster(instance)
+	}
+	if equality.Semantic.DeepEqual(current.Status, instance.Status) {
+		return nil
+	}
+	desired := current.DeepCopy()
+	desired.Status = instance.Status
+	if err := r.Client.Status().Patch(ctx, desired, client.MergeFromWithOptions(current, client.MergeFromWithOptimisticLock{})); err != nil {
+		return err
+	}
+	instance.ResourceVersion = desired.ResourceVersion
+	instance.Status = desired.Status
+	return nil
+}
+
+func staleCluster(instance *zookeeperv1beta1.ZookeeperCluster) error {
+	return errors.NewConflict(schema.GroupResource{Group: zookeeperv1beta1.GroupVersion.Group, Resource: "zookeeperclusters"}, instance.Name, fmt.Errorf("reconcile snapshot is stale"))
+}
+
+func (r *ZookeeperClusterReconciler) requireCurrentClusterSpec(ctx context.Context, instance *zookeeperv1beta1.ZookeeperCluster) error {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	current := &zookeeperv1beta1.ZookeeperCluster{}
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(instance), current); err != nil {
+		return err
+	}
+	if current.UID != instance.UID || current.Generation != instance.Generation || !current.DeletionTimestamp.IsZero() {
+		return staleCluster(instance)
+	}
+	return nil
+}
+
+func (r *ZookeeperClusterReconciler) requireCurrentStatefulSet(ctx context.Context, observed *appsv1.StatefulSet) error {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	current := &appsv1.StatefulSet{}
+	if err := reader.Get(ctx, client.ObjectKeyFromObject(observed), current); err != nil {
+		return err
+	}
+	if current.UID != observed.UID || current.ResourceVersion != observed.ResourceVersion || !current.DeletionTimestamp.IsZero() {
+		return errors.NewConflict(appsv1.Resource("statefulsets"), observed.Name, fmt.Errorf("resize snapshot is stale"))
+	}
+	return nil
 }
 
 // YAMLExporterReconciler returns a fake Reconciler which is being used for generating YAML files
@@ -755,8 +756,9 @@ func (r *ZookeeperClusterReconciler) reconcileFinalizers(ctx context.Context, in
 			return nil
 		}
 		if !utils.ContainsString(instance.ObjectMeta.Finalizers, utils.ZkFinalizer) && !config.DisableFinalizer {
+			original := instance.DeepCopy()
 			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, utils.ZkFinalizer)
-			if err = r.Client.Update(ctx, instance); err != nil {
+			if err = r.Client.Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
 				return err
 			}
 		}
@@ -768,8 +770,9 @@ func (r *ZookeeperClusterReconciler) reconcileFinalizers(ctx context.Context, in
 				return err
 			}
 		}
+		original := instance.DeepCopy()
 		instance.Finalizers = utils.RemoveString(instance.Finalizers, utils.ZkFinalizer)
-		if err = r.Client.Update(ctx, instance); err != nil {
+		if err = r.Client.Patch(ctx, instance, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
 			return err
 		}
 	}
