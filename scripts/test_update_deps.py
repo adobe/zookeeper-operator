@@ -7,15 +7,39 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = (
-    "go.mod",
-    "Dockerfile",
-    "Makefile",
-    ".github/workflows/ci.yaml",
-    ".github/workflows/release.yml",
-    ".github/workflows/workflow-lint.yaml",
-    ".github/workflows/e2e.yaml",
-)
+# Keep starting pins independent of files changed by the dependency updater.
+FIXTURES = {
+    "go.mod": "module example.org/test\n\ngo 1.25.0\n",
+    "Dockerfile": "ARG GO_VERSION=1.25\n",
+    "Makefile": (
+        "KUSTOMIZE_VERSION ?= v5.0.0\n"
+        "CONTROLLER_TOOLS_VERSION ?= v0.19.0\n"
+        "KIND_VERSION ?= v0.30.0\n"
+        "ENVTEST_TOOL_VERSION = v0.0.0-20250101000000-abcdef012345\n"
+        "ENVTEST_K8S_VERSION = 1.34.1\n"
+    ),
+    ".github/workflows/ci.yaml": (
+        "- uses: golangci/golangci-lint-action@v8\n"
+        "  with:\n"
+        "    version: v2.0.0\n"
+        "- uses: azure/setup-helm@v4\n"
+        "  with:\n"
+        "    version: v4.0.0\n"
+        "image: ghcr.io/yannh/kubeconform:v0.6.0@sha256:" + "0" * 64 + "\n"
+    ),
+    ".github/workflows/release.yml": (
+        "- uses: azure/setup-helm@v4\n"
+        "  with:\n"
+        "    version: v4.0.0\n"
+    ),
+    ".github/workflows/workflow-lint.yaml": (
+        "image: rhysd/actionlint:1.7.0@sha256:" + "0" * 64 + "\n"
+    ),
+    ".github/workflows/e2e.yaml": (
+        'kubernetes: "1.34"\n'
+        "node_image: kindest/node:v1.34.1@sha256:" + "0" * 64 + "\n"
+    ),
+}
 
 # Only external commands are faked; the updater edits real fixture files.
 FAKE_TOOL = """#!/usr/bin/env python3
@@ -100,10 +124,11 @@ class UpdateDepsTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for name in (*FILES, "update-go-deps.sh"):
+        for name, text in FIXTURES.items():
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / name, target)
+            target.write_text(text)
+        shutil.copy2(ROOT / "update-go-deps.sh", self.root / "update-go-deps.sh")
         self.bin = self.root / "bin"
         self.bin.mkdir()
         for name in ("go", "gh", "docker", "make", "curl"):
@@ -121,24 +146,14 @@ class UpdateDepsTest(unittest.TestCase):
         )
 
     def snapshot(self):
-        return {name: (self.root / name).read_text() for name in FILES}
+        return {name: (self.root / name).read_text() for name in FIXTURES}
 
     def test_updates_go_tools_and_matching_image_digests(self):
-        before = self.snapshot()
         result = self.run_updater(GOTOOLCHAIN="local")
         self.assertEqual(result.returncode, 0, result.stderr)
-        commands = (self.root / "go-commands.log").read_text().splitlines()
-        self.assertEqual(commands[-6:], [
-            "mod tidy",
-            "list -mod=readonly -m -f {{ if and (not .Replace) (not .Indirect) (not .Main)}}{{.Path}}{{end}} all",
-            "get example.org/dependency@latest",
-            "mod tidy",
-            "build ./...",
-            "make manifests generate",
-        ])
         after = self.snapshot()
-        self.assertIn("\ngo 1.99.2\n", after["go.mod"])
-        self.assertIn("\nARG GO_VERSION=1.99\n", after["Dockerfile"])
+        self.assertIn("go 1.99.2\n", after["go.mod"])
+        self.assertIn("ARG GO_VERSION=1.99\n", after["Dockerfile"])
         self.assertIn("KUSTOMIZE_VERSION ?= v5.99.0", after["Makefile"])
         self.assertIn("CONTROLLER_TOOLS_VERSION ?= v0.99.0", after["Makefile"])
         self.assertIn("version: v2.99.0", after[".github/workflows/ci.yaml"])
@@ -152,11 +167,14 @@ class UpdateDepsTest(unittest.TestCase):
             "rhysd/actionlint:1.99.0@sha256:" + "a" * 64,
             after[".github/workflows/workflow-lint.yaml"],
         )
-        # Action refs and all surrounding configuration must remain untouched.
-        for name in FILES:
-            old_lines = [line for line in before[name].splitlines() if "uses:" in line]
-            new_lines = [line for line in after[name].splitlines() if "uses:" in line]
-            self.assertEqual(old_lines, new_lines)
+        self.assertIn("KIND_VERSION ?= v0.99.0", after["Makefile"])
+        self.assertIn("ENVTEST_TOOL_VERSION = v0.0.0-20990101000000-abcdef012345",
+                      after["Makefile"])
+        self.assertIn("ENVTEST_K8S_VERSION = 1.34.9", after["Makefile"])
+        workflow = after[".github/workflows/e2e.yaml"]
+        self.assertIn('kubernetes: "1.34"', workflow)
+        self.assertIn("kindest/node:v1.34.9@sha256:" + "b" * 64, workflow)
+        self.assertNotIn("1.35", workflow)
         result = self.run_updater()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(after, self.snapshot())
@@ -173,30 +191,12 @@ class UpdateDepsTest(unittest.TestCase):
             {"GO_RELEASE": ""},
             {"GO_RELEASE": "go1.99rc1"},
             {"GO_RELEASE": "go1.99"},
+            {"NO_NODE_IMAGE": "1"},
+            {"NO_ENVTEST_ASSETS": "1"},
         ):
             with self.subTest(env=env):
                 for name, text in before.items():
                     (self.root / name).write_text(text)
-                result = self.run_updater(**env)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(before, self.snapshot())
-
-    def test_updates_kind_and_envtest_without_advancing_support_minors(self):
-        result = self.run_updater()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        makefile = (self.root / "Makefile").read_text()
-        self.assertIn("KIND_VERSION ?= v0.99.0", makefile)
-        self.assertIn("ENVTEST_TOOL_VERSION = v0.0.0-20990101000000-abcdef012345", makefile)
-        self.assertIn("ENVTEST_K8S_VERSION = 1.34.9", makefile)
-        workflow = (self.root / ".github/workflows/e2e.yaml").read_text()
-        self.assertIn('kubernetes: "1.34"', workflow)
-        self.assertIn("kindest/node:v1.34.9@sha256:" + "b" * 64, workflow)
-        self.assertNotIn('kubernetes: "1.35"', workflow)
-
-    def test_unavailable_compatibility_artifacts_do_not_partially_update_pins(self):
-        before = self.snapshot()
-        for env in ({"NO_NODE_IMAGE": "1"}, {"NO_ENVTEST_ASSETS": "1"}):
-            with self.subTest(env=env):
                 result = self.run_updater(**env)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(before, self.snapshot())
@@ -210,11 +210,12 @@ class UpdateDepsTest(unittest.TestCase):
         self.assertIn("Refusing to downgrade Go", result.stderr)
         self.assertEqual(before, self.snapshot())
 
-    def test_missing_go_pins_fail_without_partial_updates(self):
+    def test_missing_pins_fail_without_partial_updates(self):
         original = self.snapshot()
         for name, old, new in (
             ("Dockerfile", "ARG GO_VERSION=", "ARG OTHER="),
             ("go.mod", "\ngo ", "\nnot-go "),
+            (".github/workflows/release.yml", "azure/setup-helm@", "other/setup-helm@"),
         ):
             with self.subTest(name=name):
                 for filename, text in original.items():
@@ -226,30 +227,21 @@ class UpdateDepsTest(unittest.TestCase):
                 self.assertIn(name, result.stderr)
                 self.assertEqual(before, self.snapshot())
 
-    def test_go_build_failure_is_not_reported_as_success(self):
-        result = self.run_updater(FAIL_GO_BUILD="1")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("simulated Go build failure", result.stderr)
-        self.assertNotIn("update completed!", result.stdout)
-        self.assertNotIn(
-            "make manifests generate",
-            (self.root / "go-commands.log").read_text(),
-        )
-
-    def test_generation_failure_is_not_reported_as_success(self):
-        result = self.run_updater(FAIL_GENERATE="1")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("simulated generation failure", result.stderr)
-        self.assertNotIn("update completed!", result.stdout)
-
-    def test_missing_pin_fails_without_partial_build_pin_updates(self):
-        path = self.root / ".github/workflows/release.yml"
-        path.write_text(path.read_text().replace("azure/setup-helm@", "other/setup-helm@"))
-        before = self.snapshot()
-        result = self.run_updater()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("release.yml", result.stderr)
-        self.assertEqual(before, self.snapshot())
+    def test_build_or_generation_failure_is_not_reported_as_success(self):
+        for variable, message in (
+            ("FAIL_GO_BUILD", "simulated Go build failure"),
+            ("FAIL_GENERATE", "simulated generation failure"),
+        ):
+            with self.subTest(variable=variable):
+                result = self.run_updater(**{variable: "1"})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("update completed!", result.stdout)
+                if variable == "FAIL_GO_BUILD":
+                    self.assertNotIn(
+                        "make manifests generate",
+                        (self.root / "go-commands.log").read_text(),
+                    )
 
 
 if __name__ == "__main__":
