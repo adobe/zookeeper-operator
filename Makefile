@@ -96,8 +96,8 @@ SETUP_ENVTEST = $(LOCALBIN)/setup-envtest
 # Upgraded to modern stable versions
 KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.23.0
-KIND_VERSION ?= v0.31.0
-ENVTEST_TOOL_VERSION = 5d8467b3065818a3b382d8f6941147a801fd1969
+KIND_VERSION ?= v0.33.0
+ENVTEST_TOOL_VERSION = v0.25.3
 ENVTEST_K8S_VERSION = 1.34.1
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
